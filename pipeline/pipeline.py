@@ -7,3 +7,5 @@ def run_pipeline(input_path: str):
     print("Capture ready")
     print("Path:", capture.path)
     print("Type:", capture.capture_type.value)
+    print("Photos loaded:", len(capture.photos))
+    print("Tier:", capture.metadata.tier)   
