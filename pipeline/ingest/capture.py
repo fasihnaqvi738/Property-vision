@@ -1,10 +1,11 @@
 from dataclasses import dataclass
 from pathlib import Path
-from pipeline.ingest.photo import load_photos
+from pipeline.ingest.photo import load_photos, normalize_photos
 from pipeline.ingest.types import CaptureType
 from pipeline.ingest.detector import detect_capture_type
 from pipeline.ingest.metadata import CaptureMetadata
 from pipeline.ingest.tiers import CaptureTier
+from pipeline.ingest.normalized import NormalizedCapture
 
 @dataclass
 class Capture:
@@ -12,6 +13,7 @@ class Capture:
     capture_type: CaptureType
     photos: list
     metadata: CaptureMetadata
+    normalized: NormalizedCapture | None
     
     
 def load_capture(input_path: str) -> Capture:
@@ -22,6 +24,9 @@ def load_capture(input_path: str) -> Capture:
 
     if capture_type == CaptureType.PHOTO:
         photos = load_photos(path)
+        normalized = normalize_photos(path, photos)
+    else:
+        normalized = None
 
     metadata = CaptureMetadata(
         device="unknown",
@@ -32,7 +37,8 @@ def load_capture(input_path: str) -> Capture:
         path=path,
         capture_type=capture_type,
         photos=photos,
-        metadata=metadata
+        metadata=metadata,
+        normalized=normalized
     )
     
 
