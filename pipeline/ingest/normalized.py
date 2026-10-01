@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 from pathlib import Path
+from pipeline.geometry.camera import CameraIntrinsics
+from pipeline.geometry.pose import CameraPose
 
 
 @dataclass
@@ -7,8 +9,8 @@ class NormalizedCapture:
     root: Path
     rgb: list
     depth: list
-    poses: list
-    intrinsics: dict | None
+    poses: list[CameraPose]
+    intrinsics: CameraIntrinsics | None
     
     
     
