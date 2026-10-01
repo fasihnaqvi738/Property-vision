@@ -1,10 +1,9 @@
-from pipeline.ingest.types import CaptureType
+from pipeline.ingest.detector import detect_capture_type
 
 
 def main():
-    print(CaptureType.PHOTO.value)
-    print(CaptureType.VIDEO.value)
-    print(CaptureType.LIDAR.value)
+    capture_type = detect_capture_type("captures/test_photo")
+    print("Detected:", capture_type.value)
 
 
 if __name__ == "__main__":
