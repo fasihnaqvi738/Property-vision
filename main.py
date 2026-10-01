@@ -1,10 +1,11 @@
-import cv2
+from pipeline.ingest.types import CaptureType
 
 
 def main():
-    print('Open cv version', cv2.__version__)
-    
-    
+    print(CaptureType.PHOTO.value)
+    print(CaptureType.VIDEO.value)
+    print(CaptureType.LIDAR.value)
+
+
 if __name__ == "__main__":
     main()
-    
