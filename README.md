@@ -65,6 +65,16 @@ python main.py "C:\captures\polycam-room"
 
 The Polycam adapter joins images, depth, confidence, and camera poses by shared timestamp, prefers corrected image/pose folders when both are present, interprets documented depth values as millimeters, converts ARKit camera axes for back-projection, uses the documented Y-up world axis for floor analysis, and excludes low-confidence pixels. The input ZIP itself must be extracted first. No actual Polycam raw capture is present in this repository, so this route still needs a real-device run before it is considered validated.
 
+To create a drift-handling ablation from the same extracted capture, run it twice:
+
+```powershell
+python main.py "C:\captures\polycam-room" --pose-mode raw
+python main.py "C:\captures\polycam-room" --pose-mode optimized
+python pipeline\evaluation\drift_ablation.py --raw "outputs\<raw-run>\result.json" --optimized "outputs\<optimized-run>\result.json"
+```
+
+The evaluator requires results from the same capture path and reports diagnostic changes in observed floor coverage, pose translation spans, wall alignment, and geometry candidate counts. It does not establish accuracy or that optimized poses are better; that requires independent measured ground truth. The default report is written beside the optimized run as `drift_ablation.json`.
+
 This creates a colored `rgbd_point_cloud.ply`, `floor_return_preview.png`, `wall_plane_candidates.png`, and `wall_boundary_diagnostic.png`, and writes `result.json` in a timestamped output folder. The output records `reconstruction.summary.processing_runtime_seconds`, measured from capture type detection through reconstruction and artifact generation (excluding result JSON writing). The export samples every tenth depth frame and every fourth pixel. It matches RGB presentation timestamps to the depth odometry timestamps, and records the time offsets and alignment assumptions in the manifest. The floor preview outlines the largest connected area of observed floor returns and records its polygon and observed-cell area. The wall pass suppresses overlapping near-coplanar detections, compares candidate spans with nearby floor-outline support, and reports snapped endpoint cycles, line-intersection face hypotheses, provisional edge lengths, interior angles, and nearby unclosed endpoint gaps. It also screens internal wall voids and boundary gaps for possible openings, while leaving every finding unverified. The geometry review checks whether each face is simple, supported, and room-shaped under provisional thresholds. These are still diagnostics, not room labels, identified doors/windows, or calibrated room measurements: observed floor coverage is not the room footprint, an aligned candidate is not a verified wall, and a closed face is not proof of a room. Provisional edge lengths and areas have no calibrated confidence intervals. The pipeline treats depth values as millimeters, odometry poses as camera-to-world transforms, and the least-varying camera-motion axis as vertical; all need validation against capture documentation and ground truth. It does not yet create an accepted floor plan or calibrated room measurements.
 
 Any line-intersection faces are also copied to `property_plan.boundary_hypotheses` in `result.json` with their vertices, candidate area, edge lengths, supporting wall IDs, and explicit uncalibrated status. `property_plan.rooms` remains empty until a candidate is independently validated and accepted; these hypotheses are not a rendered or measured room plan.
@@ -98,4 +108,4 @@ The report scores opening width within 2 cm on at least 85% (including misses/ph
 
 - COLMAP's monocular reconstruction does not establish metric scale by itself.
 - Sparse points and camera poses are not a floor plan; there is no wall, opening, room-adjacency, or damage interpretation yet.
-- The full case-study contract still needs three-tier capture, multi-room stitching, drift handling, ground-truthed benchmarks, calibrated intervals, the incumbent comparison, and the fix loop.
+- The full case-study contract still needs three-tier capture, multi-room stitching, a real-data-validated drift ablation, ground-truthed benchmarks, calibrated intervals, the incumbent comparison, and the fix loop.

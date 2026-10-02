@@ -27,7 +27,7 @@ Status reflects the repository and artifacts available on 2026-10-02. “In prog
 | Repeat capture of at least one room at the same tier | None | Not started | Perform a second capture and compare outputs. |
 | Laser/tape ground truth for all benchmark rooms | None | Not started | Submit raw readings and measurement protocol. |
 | Accuracy gates: openings ≤2 cm on ≥85%; ceiling ≤1.5 cm, repeat ceiling spread ≤1 cm; repeat wall spread ≤1 cm or 0.5%; footprint ±8% photo; video ±3% | `pipeline/evaluation/benchmark.py`, `benchmark/ground_truth.template.json` | Evaluator ready; scores unavailable | Evaluates saved outputs against manually measured ground truth, counts missed/phantom openings, checks repeated runs, photo stitching, and video whole-property footprint at ±3%, and reports interval coverage. No qualifying benchmark labels/results have been collected yet. |
-| Drift handling and on/off ablation | `pipeline/ingest/rgbd.py` uses input poses as supplied | Fails stated gate | Add loop closure/pose-graph or plane-anchored correction and report footprint ablation. |
+| Drift handling and on/off ablation | `main.py --pose-mode {raw,optimized}`, `pipeline/evaluation/drift_ablation.py` | Prototype implemented; real-data evidence unavailable | Polycam corrected poses can be selected against raw poses, and the evaluator reports same-capture geometric diagnostic deltas. This is not an accuracy comparison; no Polycam capture or independent ground truth is available here, so the case-study gate remains unpassed. |
 | Incumbent comparison on two rooms, beat/tie ≥70% shared dimensions | None | Not started | Select/name an app, save its exports, and report dimension-by-dimension errors. |
 | Fix declaration and regenerable before/after | None | Not started | Name worst gate, root cause/evidence, predicted delta; ship fix and retain both runs. |
 | Reproduction bundle and raw benchmark data | `captures/c00a170fe1` (local, ignored), per-run `geometry_review.geojson` | Partial | Each RGB-D run now exports candidate coverage outlines, projected wall spans, and boundary faces as labeled GeoJSON for review. Add versioned acquisition instructions, ground truth, scripts, and data provenance; ensure no ignored local-only dependency. |
@@ -37,7 +37,7 @@ Status reflects the repository and artifacts available on 2026-10-02. “In prog
 ## Next engineering sequence
 
 1. Regenerate or archive the two pre-contract RGB-D outputs if they are needed as deliverables; schema conformance does not validate geometric accuracy.
-2. Validate and refine wall candidates against labeled geometry; turn supported boundary cycles into room segmentation, classified openings, dimensioned geometry, and a rendered plan; add drift correction and a measurable ablation.
+2. Acquire a real Polycam capture with raw and corrected poses, run the drift ablation against measured ground truth, then validate and refine wall candidates against labeled geometry; turn supported boundary cycles into room segmentation, classified openings, dimensioned geometry, and a rendered plan.
 3. Establish a named capture route and acquire the three-tier, multi-room benchmark with ground truth and repeats.
 4. Improve fragmented video/photo whole-property reconstruction against the shared result contract.
 5. Add damage/scope outputs, calibration, incumbent comparison, and the before/after fix-loop bundle.
