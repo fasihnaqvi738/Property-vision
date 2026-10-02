@@ -1,23 +1,31 @@
-# Property Vision room capture protocol
+# Property Vision capture protocol
 
-Use this protocol for the same furnished property in all three tiers. Name each room `R01`, `R02`, and so on; name connecting halls `C01`. Do not move furniture or staged damage between tiers. Save original files unchanged and record device, app/version, date, room ID, and capture tier in a `capture_log.csv`.
+**Capture route:** stock iPhone Camera for photo/video; Polycam Space (LiDAR) Raw Data on a Pro-class iPhone. Install Polycam from the App Store before the visit. The pipeline runs locally; it does not upload captures.
 
-## Before capture
+## Prepare the property
 
-Choose at least three rooms and one connecting hall. Include one furnished room with two staged, separately labeled damage examples. Mark the damage locations in a sketch and photograph them close-up. Measure an independent ground-truth set with a laser or tape: every wall segment, ceiling height at two points per room, each door/window width and sill height, and overall hall-to-room connections. Record units, endpoints, and who measured. Keep the raw readings; do not enter model predictions as ground truth.
+Use the same furnished property in all tiers. Label at least three rooms `R01`–`R03` and one connector `C01`. Keep furniture and staged damage fixed. In one furnished room, stage two damage examples from two classes; label them and take close-ups plus a context photo.
 
-## Photo tier — iPhone Camera
+Use a laser or tape to measure each wall segment, floor area, ceiling height at two points, each door/window width and sill height, and whole-property footprint. Sketch room connections. Preserve raw readings with units, endpoints, date, and measurer. Repeat one room in a fresh session at the same tier. Copy the two CSV templates in `benchmark/` and record device model, OS, app/version, date, tier, room, source file, and measurements.
 
-For every room, capture 4–8 still photos with the stock Camera app. Include all corners and doorways, overlap neighboring views by roughly one third, keep the phone level, and avoid digital zoom, portrait mode, and blurred shots. Capture the connector from each end. Save original-resolution JPEG/HEIC files in a separate folder per room; this prototype currently accepts JPEG/PNG, so convert HEIC copies to JPEG without deleting originals.
+## Capture
 
-## Video tier — iPhone Camera
+**Photos:** On iPhone 15 or newer, set Camera → Formats → **Most Compatible**. Take **2–8 sharp overlapping photos per room** including corners and doorways. Walk slowly around the perimeter; keep the phone level and overlap neighboring views by about one third. Avoid zoom, portrait mode, blur, and blocked lenses. Photograph connectors from both ends. Save JPEGs directly in a folder named for each room.
 
-Record a separate 30–60 second landscape video per room at the phone’s standard 30 fps setting. Start at the doorway, pause briefly, walk slowly around the perimeter, keep walls and floor in view, and finish facing the doorway. Avoid fast turns and occluding the lens. Record connectors separately. Preserve original MP4/MOV files. The pipeline samples frames and produces sparse arbitrary-scale geometry; it does not yet produce validated dimensions.
+**Video:** Record one **30–60 second landscape 30 fps clip per room**. Start at the doorway, pause, slowly walk the perimeter with walls and floor visible, then finish facing the doorway. Record connectors separately. Avoid fast turns and blocked lenses. Save original clips in a room-named folder, or name them `R01.mp4`, `R02.mp4`, `C01.mp4` in one folder.
 
-## LiDAR tier — Polycam Space mode
+**LiDAR:** On a Pro iPhone, use Polycam Space/LiDAR mode. Enable Developer Mode before capture. Slowly scan the perimeter and include the doorway; avoid fast turns and reflective surfaces where possible. Export **Raw Data** on the capture device. Keep the original ZIP and extracted folder; the latter must contain `keyframes/depth/`, RGB images, and camera JSON files.
 
-On the LiDAR-equipped iPhone, enable [Polycam Developer Mode](https://learn.poly.cam/hc/en-us/articles/34295907278996-How-to-Access-Developer-Mode) **before** capturing. Capture each room in Space (LiDAR) mode with a slow perimeter sweep and the doorway visible. Export Raw Data on the same device that made the capture and retain the original ZIP plus extracted files. Polycam documents that raw export contains depth maps, camera parameters/poses, confidence images, and mesh information ([export guide](https://learn.poly.cam/hc/en-us/articles/38276871185044-How-to-Extract-Raw-Data-and-What-Is-Included)). Pass the extracted folder to `main.py`; its Polycam adapter is implemented but needs validation with a real Polycam capture.
+## Hand off and run
 
-## Repeat and package
+Keep originals unchanged. Package room folders, Polycam ZIP and extracted export, capture log, raw measurements, damage labels/photos, and connection sketch. Run once per tier collection:
 
-Repeat one room at the same tier from a fresh capture session, without consulting the first result. Keep the same room and measurement IDs across tiers. Package the capture log, original captures, ground-truth readings, damage labels, a room-connection sketch, and a note of any obstruction or missed surface. Do not claim accuracy from the prototype until its outputs have been scored against these readings.
+```powershell
+python main.py "captures\property_photos"  # one room folder per ID; 2–8 photos each
+python main.py "captures\property_videos" # one clip per room
+python main.py "captures\property_lidar\R01" # run once for each extracted room export
+```
+
+Run the LiDAR command once per room/connector export. Keep every timestamped `outputs\...\result.json`. Add real measurements and result paths to `benchmark\ground_truth.json`, then run `python pipeline\evaluation\benchmark.py benchmark\ground_truth.json`.
+
+**Known limitation:** photo/video multi-room inputs currently return per-room sparse reconstructions; no tier yet produces an accepted stitched dimensioned plan. Do not treat smoke runs or model geometry as measured benchmark truth.

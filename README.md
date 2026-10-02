@@ -4,7 +4,7 @@ An early computer-vision prototype for reconstructing a sparse 3D scene from roo
 
 ## Current photo workflow
 
-Use a folder containing at least two overlapping JPEG or PNG images of the same room. Keep the images directly in that folder (not in subfolders). The photos should overlap, be sharp, and show textured surfaces from different viewpoints. A single photo cannot recover 3D geometry.
+For one room, use a folder containing at least two overlapping JPEG or PNG images directly inside it. For multiple rooms, use a collection root with one immediate subfolder per room, each containing 2–8 stills. The multi-room input reconstructs each room separately in one command; it does not yet produce the required stitched floor plan. Photos should overlap, be sharp, and show textured surfaces from different viewpoints. A single photo cannot recover 3D geometry.
 
 ### Setup (Windows PowerShell)
 
@@ -29,17 +29,26 @@ Pass any other room-photo folder as the first argument. To store results elsewhe
 python main.py "C:\captures\living-room" --output-dir "C:\results"
 ```
 
+For per-room photo folders, pass their common parent directory:
+
+```powershell
+python main.py "C:\captures\property-photos"
+```
+
+The root must contain at least two immediate room folders, for example `R01\`, `R02\`, and `C01\`; each must contain 2–8 JPEG/PNG stills directly inside it. One result includes the independent reconstruction for each room and a joint COLMAP reconstruction attempt across all images, with room-folder membership reported for connected models. The joint sparse model is only a cross-room matching diagnostic: scale, room placement, dimensions, adjacency, overlap checks, and the homeowner-ready stitch remain unavailable.
+
 Photo reconstruction limits COLMAP to four CPU threads to keep feature extraction more predictable on high-resolution images. The setting is recorded under `reconstruction.summary.reconstruction_settings` in each result.
 
 ## Walkthrough video workflow
 
-Pass a single video file directly, or a folder containing exactly one video:
+Pass a single video file directly, or a property folder containing one walkthrough video per room:
 
 ```powershell
 python main.py "captures\walkthrough.mp4"
+python main.py "captures\property_videos"
 ```
 
-The prototype samples approximately four frames per second (up to 160 frames), saves the selected frames and a contact sheet, then sends those frames through COLMAP sparse reconstruction with sequential matching. The result uses the shared JSON envelope with `capture.tier` set to `video`. This is a sparse monocular reconstruction with arbitrary scale; it does not yet produce dimensioned rooms, classified openings, drift correction, or calibrated uncertainty.
+For a multi-room folder, put one clip per room directly in the folder or one level down in folders named by room ID. The command returns one JSON result with separate sparse reconstructions for each clip; it does not align camera poses between clips or stitch a property plan. Each clip is sampled approximately four frames per second (up to 160 frames), saves selected frames and a contact sheet, then sends those frames through COLMAP sparse reconstruction with sequential matching. If the cap is reached, samples are spread across the complete clip and the result reports the effective rate and clip coverage. The result uses the shared JSON envelope with `capture.tier` set to `video`. This is sparse monocular reconstruction with arbitrary scale; it does not yet produce dimensioned rooms, classified openings, drift correction, or calibrated uncertainty.
 
 Video results report `video_reconstruction_quality` in the result summary: sampled-frame count, model count, largest-model coverage, and per-model registration memberships. Multiple models trigger a limitation warning because the selected primary point cloud may cover only part of the walkthrough.
 
@@ -111,5 +120,5 @@ The report scores opening width within 2 cm on at least 85% (including misses/ph
 ## Current limitations
 
 - COLMAP's monocular reconstruction does not establish metric scale by itself.
-- Sparse points and camera poses are not a floor plan; there is no wall, opening, room-adjacency, or damage interpretation yet.
+- Sparse points and camera poses are not a floor plan. Multi-room photo/video inputs are accepted, but room placement, accepted dimensions, openings, adjacency, and damage interpretation are unavailable.
 - The full case-study contract still needs three-tier capture, multi-room stitching, a real-data-validated drift ablation, ground-truthed benchmarks, calibrated intervals, the incumbent comparison, and the fix loop.

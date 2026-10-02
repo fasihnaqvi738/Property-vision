@@ -1,13 +1,15 @@
 # Build and score the case-study benchmark
 
-The benchmark needs measured truth and saved pipeline outputs. Do not guess values or copy a model prediction into ground truth. The supplied `ground_truth.template.json` is a starter manifest, not data; duplicate it as `ground_truth.json` and fill it after collecting the evidence below.
+The benchmark needs measured truth and saved pipeline outputs. Do not guess values or copy a model prediction into ground truth. The supplied `ground_truth.template.json` is a starter manifest, not data; duplicate it as `ground_truth.json` and fill it after collecting the evidence below. Use `capture_log.template.csv` to record each original sensor capture, and `raw_measurements.template.csv` to preserve tape/laser readings and room connections.
 
 ## Collect the required evidence
 
-1. Capture at least three rooms and one connecting hall. Use the same room IDs for photo, video, and LiDAR captures. Repeat at least one room at the same tier in a fresh session.
+1. Capture at least three rooms and one connecting hall. Use the same room IDs for photo, video, and LiDAR captures. For the LiDAR tier, run `main.py` once per extracted Polycam room export. Repeat at least one room at the same tier in a fresh session.
 2. Measure every room's floor area, ceiling height, each wall segment, each door/window width, and the whole property's footprint with a laser or tape. Record units, endpoints, room IDs, and the measurement source in the raw field notes. Record room adjacency from the connection sketch.
 3. In one furnished room, stage and label two examples from two damage classes. Save the original images, measure each damaged area independently, and trace the visible region as pixel coordinates in its original image. Keep each label tied to a room and surface ID; do not estimate square metres from the image polygon without calibration.
 4. Run `main.py` for each capture and preserve each run's `result.json`. A run record in the manifest points to one result and one ground-truth room. Repeats share the same `repeat_group` value.
+
+For `raw_measurements.template.csv`, use `record_type` values `wall_length`, `floor_area`, `ceiling_height`, `opening_width`, `opening_sill_height`, `property_footprint`, or `adjacency`. Store lengths in metres and areas in square metres. Record each distinct wall/opening ID, both ceiling readings per room, and room-to-room edges. The JSON ground-truth manifest contains the benchmark summaries; keep the CSV as the raw measurement record.
 
 ## Fill the manifest
 

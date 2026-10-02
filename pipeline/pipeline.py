@@ -1,4 +1,5 @@
 import json
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from time import perf_counter
@@ -51,6 +52,10 @@ def _video_reconstruction_quality(sampling: dict, models: list[dict]) -> dict:
     return {
         "status": "fragmented" if len(models) > 1 else "single_model" if models else "no_model",
         "sampled_frame_count": sampled,
+        "target_sample_fps": sampling.get("target_sample_fps"),
+        "effective_sample_fps": sampling.get("effective_sample_fps"),
+        "frame_cap_applied": sampling.get("frame_cap_applied", False),
+        "capture_coverage_percent": sampling.get("capture_coverage_percent"),
         "model_count": len(models),
         "largest_model_id": largest_model.get("model_id") if largest_model else None,
         "largest_model_registered_frames": int(largest_model.get("registered_images", 0)) if largest_model else 0,
@@ -62,6 +67,47 @@ def _video_reconstruction_quality(sampling: dict, models: list[dict]) -> dict:
         "membership_count_may_include_the_same_frame_in_multiple_models": True,
         "total_sparse_points_across_models": sum(int(model.get("sparse_points", 0)) for model in models),
     }
+
+
+def _unavailable_room_plan(room_id: str) -> dict:
+    """Represent an input room without inventing dimensions or geometry."""
+    def missing(unit: str, method: str) -> dict:
+        return {"status": "unavailable", "value": None, "unit": unit,
+                "interval": None, "method": method}
+
+    return {
+        "room_id": room_id,
+        "status": "unavailable",
+        "footprint": [],
+        "walls": [],
+        "ceiling_height": missing("m", "Photos have arbitrary scale; no calibrated room dimensions are available."),
+        "floor_area": missing("m^2", "Photo reconstruction has no metric scale or validated floor segmentation."),
+        "openings": [],
+        "surfaces": [],
+    }
+
+
+def _video_collection_inputs(capture_root: Path, video_paths: list[Path]) -> list[tuple[str, Path]]:
+    """Map one walkthrough clip per room from a shallow property folder."""
+    mappings = []
+    for video_path in video_paths:
+        relative = video_path.relative_to(capture_root)
+        if len(relative.parts) == 1:
+            room_id = video_path.stem
+        elif len(relative.parts) == 2:
+            room_id = relative.parts[0]
+        else:
+            raise ValueError(
+                f"Video {relative} is nested too deeply. Put clips directly in the property folder "
+                "or one folder per room."
+            )
+        mappings.append((room_id, video_path))
+    room_ids = [room_id for room_id, _ in mappings]
+    if len(set(room_ids)) != len(room_ids):
+        raise ValueError("Each video room must have exactly one clip and a unique room folder/name.")
+    if not all(room_id.strip() for room_id in room_ids):
+        raise ValueError("Video room IDs derived from folder or filename cannot be empty.")
+    return sorted(mappings)
 
 
 def run_pipeline(input_path: str, output_root: str = "outputs", *, pose_mode: str = "auto") -> Path:
@@ -145,6 +191,72 @@ def run_pipeline(input_path: str, output_root: str = "outputs", *, pose_mode: st
                 path for path in capture.path.rglob("*")
                 if path.is_file() and path.suffix.lower() in video_extensions
             )
+            if len(videos) > 1:
+                from pipeline.reconstruction.colmap import reconstruct_from_images
+
+                room_inputs = _video_collection_inputs(capture.path, videos)
+                timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+                run_dir = Path(output_root) / f"{capture.path.name}_{timestamp}"
+                reconstruction_settings = {
+                    "max_image_size": 1280,
+                    "num_threads": 4,
+                    "max_num_features": 4096,
+                    "matching_strategy": "sequential",
+                    "sequential_overlap": 30,
+                }
+                room_summaries = []
+                plan_rooms = []
+                contact_sheets = []
+                for room_id, room_video in room_inputs:
+                    room_dir = run_dir / "room_videos" / room_id
+                    sampling = sample_walkthrough_video(room_video, room_dir)
+                    models = reconstruct_from_images(
+                        room_dir / sampling["frame_directory"],
+                        run_dir / "reconstruction" / room_id,
+                        **reconstruction_settings,
+                    )
+                    primary = max(
+                        models,
+                        key=lambda model: (model["registered_images"], model["sparse_points"]),
+                        default=None,
+                    )
+                    room_summaries.append({
+                        "room_id": room_id,
+                        "source_video": room_video.relative_to(capture.path).as_posix(),
+                        "sampling": sampling,
+                        "models": models,
+                        "primary_model_id": primary["model_id"] if primary else None,
+                        "video_reconstruction_quality": _video_reconstruction_quality(sampling, models),
+                    })
+                    plan_rooms.append(_unavailable_room_plan(room_id))
+                    contact_sheets.append(str(room_dir / sampling["contact_sheet"]))
+
+                result = build_result(
+                    capture_id=capture.path.name,
+                    tier="video",
+                    source_format="multi_room_walkthrough_videos",
+                    device=capture.metadata.device,
+                    input_files=[path.relative_to(capture.path).as_posix() for _, path in room_inputs],
+                    reconstruction_method="Independent per-room frame sampling and COLMAP sequential mapping",
+                    reconstruction_summary={
+                        "capture_type": "multi_room_walkthrough_collection",
+                        "rooms": room_summaries,
+                        "room_count": len(room_summaries),
+                        "scale": "arbitrary_per_room",
+                        "reconstruction_settings": reconstruction_settings,
+                    },
+                    point_cloud=None,
+                    limitations=[
+                        "Each room video is sampled and reconstructed independently; camera poses are not aligned across clips.",
+                        "The property result is not a stitched plan: room placement, adjacency, overlaps, and footprint are unavailable.",
+                        "Monocular video has arbitrary scale and does not yield verified walls, ceiling heights, areas, or openings.",
+                    ],
+                    raw_capture=[str(capture.path.resolve())],
+                    debug_views=contact_sheets,
+                )
+                result["property_plan"]["status"] = "partial"
+                result["property_plan"]["rooms"] = plan_rooms
+                return _write_result(result, run_dir / "result.json", started_at)
             if len(videos) != 1:
                 raise ValueError(
                     f"Expected exactly one walkthrough video in {capture.path}; found {len(videos)}. "
@@ -225,9 +337,173 @@ def run_pipeline(input_path: str, output_root: str = "outputs", *, pose_mode: st
         path for path in capture.path.iterdir()
         if path.is_file() and path.suffix.lower() in {".jpg", ".jpeg", ".png"}
     )
+    room_folders = sorted(
+        folder for folder in capture.path.iterdir()
+        if folder.is_dir() and any(
+            file.is_file() and file.suffix.lower() in {".jpg", ".jpeg", ".png"}
+            for file in folder.iterdir()
+        )
+    )
+    if photo_files and room_folders:
+        raise ValueError(
+            "Photo input cannot mix images at the root with per-room photo folders. "
+            "Put all photos directly in one folder or all room folders under a collection root."
+        )
+    if room_folders:
+        if len(room_folders) < 2:
+            raise ValueError("A multi-room photo collection needs at least two room subfolders.")
+        room_inputs = []
+        for folder in room_folders:
+            images = sorted(
+                file for file in folder.iterdir()
+                if file.is_file() and file.suffix.lower() in {".jpg", ".jpeg", ".png"}
+            )
+            if not 2 <= len(images) <= 8:
+                raise ValueError(
+                    f"Room folder {folder.name!r} must contain 2 to 8 JPEG/PNG stills; found {len(images)}."
+                )
+            room_inputs.append((folder.name, folder, images))
+
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+        run_dir = Path(output_root) / f"{capture.path.name}_{timestamp}"
+        reconstruction_settings = {"num_threads": 4}
+        per_room = []
+        plan_rooms = []
+        all_input_files = []
+        for room_id, folder, images in room_inputs:
+            models = reconstruct_from_images(
+                folder, run_dir / "reconstruction" / room_id,
+                **reconstruction_settings,
+            )
+            primary = max(
+                models,
+                key=lambda model: (model["registered_images"], model["sparse_points"]),
+                default=None,
+            )
+            per_room.append({
+                "room_id": room_id,
+                "input_photo_count": len(images),
+                "models": models,
+                "primary_model_id": primary["model_id"] if primary else None,
+                "registered_photo_count": len({
+                    name for model in models for name in model.get("registered_image_names", [])
+                }),
+                "registered_image_memberships": sum(
+                    model["registered_images"] for model in models
+                ),
+            })
+            all_input_files.extend(str(Path(room_id) / image.name) for image in images)
+            plan_rooms.append(_unavailable_room_plan(room_id))
+
+        # A joint SfM run can connect views through shared doorway/connector
+        # imagery. It is a reconstruction diagnostic, not room placement or a
+        # metrically scaled stitched floor plan.
+        joint_image_dir = run_dir / "property_photo_frames"
+        joint_image_dir.mkdir(parents=True, exist_ok=False)
+        for room_id, _, images in room_inputs:
+            for image in images:
+                shutil.copy2(image, joint_image_dir / f"{room_id}__{image.name}")
+        joint_models = []
+        joint_error = None
+        try:
+            joint_models = reconstruct_from_images(
+                joint_image_dir,
+                run_dir / "property_reconstruction",
+                num_threads=4,
+                matching_strategy="exhaustive",
+            )
+        except RuntimeError as error:
+            # Per-room results remain useful when views cannot form a joint
+            # view graph; expose the failed stitch attempt in the result.
+            joint_error = str(error)
+        joint_model_summaries = []
+        for model in joint_models:
+            registered_names = model.get("registered_image_names", [])
+            registered_rooms = sorted({
+                room_id
+                for room_id, _, _ in room_inputs
+                if any(name.startswith(f"{room_id}__") for name in registered_names)
+            })
+            joint_model_summaries.append({
+                **model,
+                "registered_room_ids": registered_rooms,
+                "registered_room_count": len(registered_rooms),
+                "contains_multiple_rooms": len(registered_rooms) > 1,
+            })
+        largest_joint_model = max(
+            joint_model_summaries,
+            key=lambda model: model["registered_images"],
+            default=None,
+        )
+        largest_joint_names = set(
+            largest_joint_model.get("registered_image_names", [])
+            if largest_joint_model else []
+        )
+        largest_joint_rooms = largest_joint_model["registered_room_ids"] if largest_joint_model else []
+
+        limitations = [
+            "Each photo subfolder is reconstructed independently; camera poses do not place rooms in a shared property frame.",
+            "The multi-room result is not a stitched floor plan: room adjacency, overlaps, and whole-property footprint are unavailable.",
+            "Monocular photo reconstructions have arbitrary scale; walls, ceiling heights, floor areas, and openings are unavailable.",
+            "Use the same stable room-folder names across tiers; independent captures do not themselves establish matching room identities.",
+        ]
+        result = build_result(
+            capture_id=capture.path.name,
+            tier="photo",
+            source_format="multi_room_photo_folders",
+            device=capture.metadata.device,
+            input_files=all_input_files,
+            reconstruction_method="Independent per-room COLMAP incremental mapping",
+            reconstruction_summary={
+                "capture_type": "multi_room_photo_collection",
+                "rooms": per_room,
+                "room_count": len(per_room),
+                "total_registered_photos": sum(item["registered_photo_count"] for item in per_room),
+                "scale": "arbitrary_per_room",
+                "reconstruction_settings": reconstruction_settings,
+                "joint_property_reconstruction": {
+                    "status": "diagnostic_only" if joint_models else "failed",
+                    "method": "COLMAP exhaustive matching over all room-folder photos",
+                    "input_photo_count": len(all_input_files),
+                    "models": joint_model_summaries,
+                    "registered_image_count": len({
+                        name for model in joint_models
+                        for name in model.get("registered_image_names", [])
+                    }),
+                    "registered_image_memberships": sum(
+                        model["registered_images"] for model in joint_models
+                    ),
+                    "model_count": len(joint_model_summaries),
+                    "largest_model_registered_photos": len(largest_joint_names),
+                    "largest_model_photo_coverage_percent": (
+                        round(len(largest_joint_names) / len(all_input_files) * 100, 1)
+                        if all_input_files else None
+                    ),
+                    "largest_model_room_ids": largest_joint_rooms,
+                    "largest_model_room_count": len(largest_joint_rooms),
+                    "largest_model_spans_all_room_folders": (
+                        set(largest_joint_rooms) == {room_id for room_id, _, _ in room_inputs}
+                    ),
+                    "rooms_with_registered_images": sorted({
+                        room_id for model in joint_model_summaries
+                        for room_id in model["registered_room_ids"]
+                    }),
+                    "failure_reason": joint_error,
+                    "point_clouds_are_metric_oriented_or_room_segmented": False,
+                },
+            },
+            point_cloud=None,
+            limitations=limitations,
+            raw_capture=[str(capture.path.resolve())],
+        )
+        result["property_plan"]["status"] = "partial"
+        result["property_plan"]["rooms"] = plan_rooms
+        result["property_plan"]["stitched_plan"]["status"] = "unavailable"
+        return _write_result(result, run_dir / "result.json", started_at)
+
     if not photo_files:
         raise ValueError(
-            f"No JPEG or PNG photos found directly inside {capture.path}."
+            f"No JPEG/PNG photos found directly in {capture.path} or in its immediate room subfolders."
         )
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
