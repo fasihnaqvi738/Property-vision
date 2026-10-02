@@ -192,8 +192,24 @@ def _validate_manifest(manifest: dict, manifest_path: Path) -> None:
             extent = example.get("extent_m2")
             if extent is not None and (not isinstance(extent, (int, float)) or isinstance(extent, bool) or extent <= 0):
                 errors.append(f"{label}.extent_m2 must be a positive number or null.")
-            if not isinstance(example.get("photo_paths", []), list):
-                errors.append(f"{label}.photo_paths must be an array.")
+            if not isinstance(example.get("surface_id"), str) or not example["surface_id"].strip():
+                errors.append(f"{label}.surface_id must be a non-empty string.")
+            regions = example.get("regions", [])
+            if not isinstance(regions, list):
+                errors.append(f"{label}.regions must be an array.")
+            else:
+                for region_index, region in enumerate(regions):
+                    region_label = f"{label}.regions[{region_index}]"
+                    polygon = region.get("polygon_px") if isinstance(region, dict) else None
+                    if not isinstance(region, dict) or not isinstance(region.get("image_path"), str):
+                        errors.append(f"{region_label} must include image_path and polygon_px.")
+                        continue
+                    if not isinstance(polygon, list) or len(polygon) < 3 or any(
+                        not isinstance(point, list) or len(point) != 2
+                        or any(not isinstance(value, (int, float)) or isinstance(value, bool) for value in point)
+                        for point in polygon
+                    ):
+                        errors.append(f"{region_label}.polygon_px must have at least three [x, y] pixel points.")
     if errors:
         raise ValueError("Invalid benchmark manifest:\n- " + "\n- ".join(errors))
 
@@ -260,11 +276,28 @@ def _benchmark_readiness(manifest: dict) -> dict:
         },
         "staged_damage": {
             "passed": len(damage_examples) >= 2 and len(damage_classes) >= 2
-            and all(isinstance(example, dict) and example.get("photo_paths") and isinstance(example.get("extent_m2"), (int, float))
-                    for example in damage_examples),
+            and all(
+                isinstance(example, dict)
+                and isinstance(example.get("surface_id"), str) and bool(example["surface_id"].strip())
+                and isinstance(example.get("extent_m2"), (int, float))
+                and not isinstance(example.get("extent_m2"), bool) and example["extent_m2"] > 0
+                and isinstance(example.get("regions"), list) and bool(example["regions"])
+                and all(
+                    isinstance(region, dict)
+                    and isinstance(region.get("image_path"), str) and bool(region["image_path"].strip())
+                    and isinstance(region.get("polygon_px"), list) and len(region["polygon_px"]) >= 3
+                    and all(
+                        isinstance(point, list) and len(point) == 2
+                        and all(isinstance(value, (int, float)) and not isinstance(value, bool) for value in point)
+                        for point in region["polygon_px"]
+                    )
+                    for region in example["regions"]
+                )
+                for example in damage_examples
+            ),
             "labeled_examples": len(damage_examples),
             "distinct_classes": sorted(damage_classes),
-            "detail": "Requires two measured, photographed damage examples from different classes.",
+            "detail": "Requires two measured examples from different classes, each tied to a surface and an image polygon.",
         },
     }
     return {"ready": all(check["passed"] for check in checks.values()), "checks": checks}
