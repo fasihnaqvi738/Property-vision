@@ -86,13 +86,36 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["region_id", "surface_id", "class", "extent", "confidence"],
+        "required": ["region_id", "surface_id", "class", "extent", "confidence", "image_regions"],
         "properties": {
           "region_id": { "type": "string" },
           "surface_id": { "type": "string" },
           "class": { "type": "string" },
           "extent": { "$ref": "#/$defs/measurement" },
-          "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "image_regions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["image_path", "polygon_px"],
+              "properties": {
+                "image_path": { "type": "string", "minLength": 1 },
+                "polygon_px": {
+                  "type": "array",
+                  "minItems": 3,
+                  "items": {
+                    "type": "array",
+                    "prefixItems": [
+                      { "type": "number" },
+                      { "type": "number" }
+                    ],
+                    "items": false
+                  }
+                }
+              }
+            }
+          }
         }
       }
     },
