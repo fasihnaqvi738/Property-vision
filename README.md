@@ -61,6 +61,8 @@ This creates a colored `rgbd_point_cloud.ply`, `floor_return_preview.png`, `wall
 
 Any line-intersection faces are also copied to `property_plan.boundary_hypotheses` in `result.json` with their vertices, candidate area, edge lengths, supporting wall IDs, and explicit uncalibrated status. `property_plan.rooms` remains empty until a candidate is independently validated and accepted; these hypotheses are not a rendered or measured room plan.
 
+Each RGB-D run also writes `geometry_review.geojson`, containing the observed floor-coverage outline, projected wall spans, and candidate face polygons with diagnostic labels. It uses a capture-local coordinate frame with metres assumed; it is intended for GIS review and annotation, not as a survey-ready floor plan.
+
 Photo, video, and RGB-D runs share the versioned output envelope defined in `schemas/property_capture_result.schema.json`. Every newly generated `result.json` is checked against that schema before it is written. Existing output folders can be checked in bulk:
 
 ```powershell

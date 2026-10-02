@@ -1,6 +1,7 @@
 """Reader and lightweight point-cloud exporter for the supplied RGB-D bundle."""
 
 import csv
+import json
 import math
 from pathlib import Path
 
@@ -16,6 +17,84 @@ def _read_odometry(path: Path) -> list[dict[str, str]]:
     if not rows:
         raise ValueError(f"No odometry records found in {path}.")
     return rows
+
+
+def _write_geometry_review_geojson(
+    output_path: Path, floor_analysis: dict, wall_analysis: dict
+) -> Path:
+    """Export diagnostic-only floor coverage, wall spans, and face hypotheses."""
+    features = []
+    outline = floor_analysis.get("largest_component_coverage_outline", {})
+    vertices = outline.get("vertices_m", [])
+    if len(vertices) >= 4:
+        features.append({
+            "type": "Feature",
+            "geometry": {"type": "Polygon", "coordinates": [vertices]},
+            "properties": {
+                "feature_type": "observed_floor_coverage",
+                "status": "diagnostic_only",
+                "area_m2": outline.get("outline_area_m2"),
+                "is_room_footprint": False,
+                "note": "Observed sensor coverage only; may stop at occlusion or furniture.",
+            },
+        })
+
+    alignments = {
+        item.get("candidate_id"): item.get("status")
+        for item in wall_analysis.get("floor_coverage_alignment", {}).get("wall_candidates", [])
+    }
+    for wall in wall_analysis.get("wall_plane_candidates", []):
+        endpoints = wall.get("projected_endpoints_m", [])
+        if len(endpoints) != 2:
+            continue
+        features.append({
+            "type": "Feature",
+            "geometry": {"type": "LineString", "coordinates": endpoints},
+            "properties": {
+                "feature_type": "wall_plane_candidate",
+                "candidate_id": wall.get("candidate_id"),
+                "status": "unverified_candidate",
+                "floor_alignment": alignments.get(wall.get("candidate_id"), "unavailable"),
+                "observed_length_m": wall.get("observed_length_m"),
+                "observed_height_m": wall.get("observed_height_m"),
+                "note": "Projected planar support; not an accepted wall measurement.",
+            },
+        })
+
+    boundary = wall_analysis.get("room_boundary_hypotheses", {})
+    intersections = boundary.get("line_intersection_hypotheses", {})
+    for face in intersections.get("hypotheses", []):
+        ring = face.get("vertices_xy_m", [])
+        if len(ring) < 3:
+            continue
+        if ring[0] != ring[-1]:
+            ring = [*ring, ring[0]]
+        features.append({
+            "type": "Feature",
+            "geometry": {"type": "Polygon", "coordinates": [ring]},
+            "properties": {
+                "feature_type": "boundary_face_hypothesis",
+                "candidate_id": face.get("hypothesis_id"),
+                "status": "diagnostic_only",
+                "area_m2": face.get("area_m2"),
+                "supporting_wall_candidate_ids": face.get("supporting_wall_candidate_ids", []),
+                "confidence_interval_m2": None,
+                "note": "Not a verified room; metric scale and geometry are unvalidated.",
+            },
+        })
+
+    collection = {
+        "type": "FeatureCollection",
+        "name": "Property Vision geometry review (diagnostic only)",
+        "properties": {
+            "coordinate_system": "capture-local XY; metres assumed",
+            "axis_order": outline.get("coordinates_axes", ["x", "y"]),
+            "measurement_status": "uncalibrated; no independent ground truth",
+        },
+        "features": features,
+    }
+    output_path.write_text(json.dumps(collection, indent=2) + "\n", encoding="utf-8")
+    return output_path
 
 
 def _quaternion_matrix(qx: float, qy: float, qz: float, qw: float) -> np.ndarray:
@@ -242,6 +321,9 @@ def reconstruct_rgbd(capture_path: Path, output_dir: Path) -> dict:
         }
     ply_path = output_dir / "rgbd_point_cloud.ply"
     _write_ascii_ply(ply_path, points, colors)
+    geometry_review_path = _write_geometry_review_geojson(
+        output_dir / "geometry_review.geojson", floor_analysis, wall_analysis
+    )
 
     manifest = {
         "format_version": 1,
@@ -265,6 +347,7 @@ def reconstruct_rgbd(capture_path: Path, output_dir: Path) -> dict:
         "floor_return_analysis": floor_analysis,
         "wall_plane_analysis": wall_analysis,
         "artifacts": {"point_cloud": ply_path.name},
+        "geometry_review_geojson": geometry_review_path.name,
         "limitations": [
             "Depth units and pose convention are assumptions and need validation against dataset documentation or a known dimension.",
             "RGB/depth pixel registration and the shared stream start time are inferred from matching aspect ratios, intrinsics, and nearly equal stream durations; they have not been independently ground-truthed.",

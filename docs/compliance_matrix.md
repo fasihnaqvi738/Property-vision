@@ -30,7 +30,7 @@ Status reflects the repository and artifacts available on 2026-10-02. “In prog
 | Drift handling and on/off ablation | `pipeline/ingest/rgbd.py` uses input poses as supplied | Fails stated gate | Add loop closure/pose-graph or plane-anchored correction and report footprint ablation. |
 | Incumbent comparison on two rooms, beat/tie ≥70% shared dimensions | None | Not started | Select/name an app, save its exports, and report dimension-by-dimension errors. |
 | Fix declaration and regenerable before/after | None | Not started | Name worst gate, root cause/evidence, predicted delta; ship fix and retain both runs. |
-| Reproduction bundle and raw benchmark data | `captures/c00a170fe1` (local, ignored) | Partial | Add versioned acquisition instructions, ground truth, scripts, and data provenance; ensure no ignored local-only dependency. |
+| Reproduction bundle and raw benchmark data | `captures/c00a170fe1` (local, ignored), per-run `geometry_review.geojson` | Partial | Each RGB-D run now exports candidate coverage outlines, projected wall spans, and boundary faces as labeled GeoJSON for review. Add versioned acquisition instructions, ground truth, scripts, and data provenance; ensure no ignored local-only dependency. |
 | Technical report ≤6 pages | None | Not started | Write after measurements and ablations exist. |
 | Process evidence | Git history | In progress | Continue small, reviewable commits; ensure commits are pushed and reproducible. |
 

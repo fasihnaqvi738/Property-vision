@@ -76,6 +76,10 @@ def run_pipeline(input_path: str, output_root: str = "outputs") -> Path:
                 [str(run_dir / summary["wall_plane_analysis"]["boundary_preview"])]
                 if summary.get("wall_plane_analysis", {}).get("boundary_preview")
                 else []
+            ) + (
+                [str(run_dir / summary["geometry_review_geojson"])]
+                if summary.get("geometry_review_geojson")
+                else []
             ),
         )
         return _write_result(result, run_dir / "result.json")
