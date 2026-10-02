@@ -16,7 +16,7 @@ Record a separate 30–60 second landscape video per room at the phone’s stand
 
 ## LiDAR tier — Polycam Space mode
 
-On the LiDAR-equipped iPhone, enable [Polycam Developer Mode](https://learn.poly.cam/hc/en-us/articles/34295907278996-How-to-Access-Developer-Mode) **before** capturing. Capture each room in Space (LiDAR) mode with a slow perimeter sweep and the doorway visible. Export Raw Data on the same device that made the capture and retain the original ZIP plus extracted files. Polycam documents that raw export contains depth maps, camera parameters/poses, confidence images, and mesh information ([export guide](https://learn.poly.cam/hc/en-us/articles/38276871185044-How-to-Extract-Raw-Data-and-What-Is-Included)). This repository’s current LiDAR loader accepts the supplied RGB-D bundle layout, not Polycam’s raw ZIP directly; preserve these files for the planned adapter instead of converting them to a point cloud.
+On the LiDAR-equipped iPhone, enable [Polycam Developer Mode](https://learn.poly.cam/hc/en-us/articles/34295907278996-How-to-Access-Developer-Mode) **before** capturing. Capture each room in Space (LiDAR) mode with a slow perimeter sweep and the doorway visible. Export Raw Data on the same device that made the capture and retain the original ZIP plus extracted files. Polycam documents that raw export contains depth maps, camera parameters/poses, confidence images, and mesh information ([export guide](https://learn.poly.cam/hc/en-us/articles/38276871185044-How-to-Extract-Raw-Data-and-What-Is-Included)). Pass the extracted folder to `main.py`; its Polycam adapter is implemented but needs validation with a real Polycam capture.
 
 ## Repeat and package
 

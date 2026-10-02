@@ -5,13 +5,13 @@ from pipeline.pipeline import run_pipeline
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Build a sparse reconstruction from room photos or an RGB-D capture."
+        description="Build a sparse reconstruction from room photos, walkthrough video, or an RGB-D capture."
     )
     parser.add_argument(
         "capture_folder",
         nargs="?",
         default="captures/photo_room",
-        help="Photo folder or RGB-D bundle with depth/, confidence/, and odometry.csv.",
+        help="Photo folder, walkthrough video, supplied RGB-D bundle, or extracted Polycam raw LiDAR folder.",
     )
     parser.add_argument(
         "--output-dir",

@@ -48,15 +48,26 @@ def run_pipeline(input_path: str, output_root: str = "outputs") -> Path:
         result = build_result(
             capture_id=capture.path.name,
             tier="lidar",
-            source_format="rgbd_bundle",
+            source_format=summary.get("capture_type", "rgbd_bundle"),
             device=capture.metadata.device,
-            input_files=[
-                "rgb.mp4",
-                "camera_matrix.csv",
-                "odometry.csv",
-                "depth/*.png",
-                "confidence/*.png",
-            ],
+            input_files=(
+                [
+                    "keyframes/images/*",
+                    "keyframes/corrected_images/*",
+                    "keyframes/cameras/*.json",
+                    "keyframes/corrected_cameras/*.json",
+                    "keyframes/depth/*.png",
+                    "keyframes/confidence/*.png",
+                ]
+                if summary.get("capture_type") == "polycam_raw_lidar"
+                else [
+                    "rgb.mp4",
+                    "camera_matrix.csv",
+                    "odometry.csv",
+                    "depth/*.png",
+                    "confidence/*.png",
+                ]
+            ),
             reconstruction_method="RGB-D depth back-projection with supplied odometry poses",
             reconstruction_summary=summary,
             point_cloud=str(run_dir / "rgbd_point_cloud.ply"),

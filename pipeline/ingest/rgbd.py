@@ -217,6 +217,64 @@ def _read_synchronized_rgb_frames(
     return resized_rgb, sync
 
 
+def _polycam_directories(capture_path: Path) -> tuple[Path, Path, Path, bool]:
+    keyframes = capture_path / "keyframes"
+    corrected_images = keyframes / "corrected_images"
+    corrected_cameras = keyframes / "corrected_cameras"
+    use_corrected = corrected_images.is_dir() and corrected_cameras.is_dir()
+    image_dir = corrected_images if use_corrected else keyframes / "images"
+    camera_dir = corrected_cameras if use_corrected else keyframes / "cameras"
+    depth_dir = keyframes / "depth"
+    if not all(directory.is_dir() for directory in (depth_dir, image_dir, camera_dir)):
+        raise ValueError(
+            "Polycam raw capture needs keyframes/depth plus matching images and cameras "
+            "(or corrected_images and corrected_cameras) directories."
+        )
+    return depth_dir, image_dir, camera_dir, use_corrected
+
+
+def _read_polycam_rgb_frames(
+    image_dir: Path, target_ids: list[str], depth_width: int, depth_height: int,
+) -> tuple[dict[str, np.ndarray], dict]:
+    image_files = {
+        path.stem: path for path in image_dir.iterdir()
+        if path.is_file() and path.suffix.lower() in {".jpg", ".jpeg", ".png"}
+    }
+    resized = {}
+    source_dimensions = None
+    for frame_id in target_ids:
+        image_path = image_files.get(frame_id)
+        if image_path is None:
+            raise ValueError(f"Polycam RGB keyframe is missing for timestamp {frame_id}.")
+        bgr = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
+        if bgr is None:
+            raise ValueError(f"Could not read Polycam RGB keyframe: {image_path}")
+        height, width = bgr.shape[:2]
+        dimensions = [width, height]
+        if source_dimensions is None:
+            source_dimensions = dimensions
+        elif source_dimensions != dimensions:
+            raise ValueError("Polycam RGB keyframes have inconsistent dimensions.")
+        if width / height != depth_width / depth_height:
+            raise ValueError("Polycam RGB and depth keyframes have different aspect ratios.")
+        resized_bgr = cv2.resize(bgr, (depth_width, depth_height), interpolation=cv2.INTER_AREA)
+        resized[frame_id] = cv2.cvtColor(resized_bgr, cv2.COLOR_BGR2RGB)
+    return resized, {
+        "matched_frames": len(resized),
+        "rgb_image_dimensions": source_dimensions,
+        "depth_dimensions": [depth_width, depth_height],
+        "temporal_match_method": "Exact shared keyframe timestamp in RGB, depth, and camera filenames.",
+        "pose_variant": "corrected" if "corrected_" in image_dir.name else "original",
+    }
+
+
+def _numeric_frame_sort(frame_id: str) -> tuple[int, int | str]:
+    try:
+        return 0, int(frame_id)
+    except ValueError:
+        return 1, frame_id
+
+
 def _write_ascii_ply(path: Path, points: np.ndarray, colors: np.ndarray) -> None:
     with path.open("w", encoding="ascii", newline="\n") as handle:
         handle.write("ply\nformat ascii 1.0\n")
@@ -230,20 +288,39 @@ def _write_ascii_ply(path: Path, points: np.ndarray, colors: np.ndarray) -> None
 
 
 def reconstruct_rgbd(capture_path: Path, output_dir: Path) -> dict:
-    """Back-project sparse depth samples into an initial world-frame PLY.
-
-    Depth values are treated as millimeters, and CSV poses as camera-to-world
-    transforms. Both assumptions are recorded in the output manifest.
-    """
+    """Back-project sparse depth samples from the supplied or Polycam RGB-D tier."""
     capture_path = Path(capture_path)
     output_dir.mkdir(parents=True, exist_ok=True)
-    rows = _read_odometry(capture_path / "odometry.csv")
-    depth_dir = capture_path / "depth"
-    depth_files = {p.stem: p for p in depth_dir.glob("*.png")}
-    rows_by_frame = {row["frame"].strip(): row for row in rows}
-    frame_ids = sorted(set(depth_files) & set(rows_by_frame))
+    polycam = (capture_path / "keyframes" / "depth").is_dir()
+    if polycam:
+        depth_dir, image_dir, camera_dir, corrected_poses = _polycam_directories(capture_path)
+        confidence_dir = capture_path / "keyframes" / "confidence"
+        depth_files = {p.stem: p for p in depth_dir.glob("*.png")}
+        camera_files = {p.stem: p for p in camera_dir.glob("*.json")}
+        image_files = {
+            p.stem for p in image_dir.iterdir()
+            if p.is_file() and p.suffix.lower() in {".jpg", ".jpeg", ".png"}
+        }
+        frame_ids = sorted(set(depth_files) & set(camera_files) & image_files, key=_numeric_frame_sort)
+        if not frame_ids:
+            raise ValueError("Polycam export has no timestamps shared by depth, camera, and RGB keyframes.")
+        rows_by_frame = {}
+        for frame_id in frame_ids:
+            with camera_files[frame_id].open(encoding="utf-8") as camera_file:
+                rows_by_frame[frame_id] = json.load(camera_file)
+        rows = list(rows_by_frame.values())
+        source_format = "polycam_raw_lidar"
+    else:
+        rows = _read_odometry(capture_path / "odometry.csv")
+        depth_dir = capture_path / "depth"
+        confidence_dir = capture_path / "confidence"
+        depth_files = {p.stem: p for p in depth_dir.glob("*.png")}
+        rows_by_frame = {row["frame"].strip(): row for row in rows}
+        frame_ids = sorted(set(depth_files) & set(rows_by_frame), key=_numeric_frame_sort)
+        source_format = "rgbd_bundle"
+
     if not frame_ids:
-        raise ValueError("No depth PNG frame IDs match the odometry CSV.")
+        raise ValueError("No depth PNG frame IDs match camera pose records.")
 
     frame_stride = 10
     pixel_stride = 4
@@ -253,13 +330,18 @@ def reconstruct_rgbd(capture_path: Path, output_dir: Path) -> dict:
     if first_depth is None or first_depth.ndim != 2:
         raise ValueError(f"Could not read a single-channel depth image: {depth_files[sampled_frame_ids[0]]}")
     depth_height, depth_width = first_depth.shape
-    rgb_frames, video_sync = _read_synchronized_rgb_frames(
-        capture_path / "rgb.mp4",
-        rows,
-        sampled_frame_ids,
-        depth_width,
-        depth_height,
-    )
+    if polycam:
+        rgb_frames, video_sync = _read_polycam_rgb_frames(
+            image_dir, sampled_frame_ids, depth_width, depth_height
+        )
+    else:
+        rgb_frames, video_sync = _read_synchronized_rgb_frames(
+            capture_path / "rgb.mp4",
+            rows,
+            sampled_frame_ids,
+            depth_width,
+            depth_height,
+        )
     points_chunks = []
     color_chunks = []
     pose_translations = []
@@ -276,31 +358,17 @@ def reconstruct_rgbd(capture_path: Path, output_dir: Path) -> dict:
         if depth.ndim != 2:
             raise ValueError(f"Expected single-channel depth image: {depth_files[frame_id]}")
 
-        # Per-frame fx/fy/cx/cy describe the 1920x1440 RGB camera. Scale its
-        # intrinsics to the 256x192 depth raster (or the actual PNG dimensions).
-        fx = float(row["fx"]) * width / 1920.0
-        fy = float(row["fy"]) * height / 1440.0
-        cx = float(row["cx"]) * width / 1920.0
-        cy = float(row["cy"]) * height / 1440.0
+        # Camera JSON/CSV intrinsics refer to the matching RGB image dimensions.
+        rgb_width = float(row.get("width", 1920))
+        rgb_height = float(row.get("height", 1440))
+        fx = float(row["fx"]) * width / rgb_width
+        fy = float(row["fy"]) * height / rgb_height
+        cx = float(row["cx"]) * width / rgb_width
+        cy = float(row["cy"]) * height / rgb_height
         v, u = np.mgrid[0:height:pixel_stride, 0:width:pixel_stride]
         z = depth[::pixel_stride, ::pixel_stride] * depth_scale_to_meters
         valid = np.isfinite(z) & (z > 0)
-        if not np.any(valid):
-            continue
-
-        camera_points = np.column_stack((
-            ((u[valid] - cx) * z[valid] / fx),
-            ((v[valid] - cy) * z[valid] / fy),
-            z[valid],
-        ))
-        rotation = _quaternion_matrix(*(float(row[k]) for k in ("qx", "qy", "qz", "qw")))
-        translation = np.array([float(row[k]) for k in ("x", "y", "z")])
-        pose_translations.append(translation)
-        points_chunks.append(camera_points @ rotation.T + translation)
-        frame_colors = rgb_frames[frame_id][::pixel_stride, ::pixel_stride]
-        color_chunks.append(frame_colors[valid])
-
-        confidence_path = capture_path / "confidence" / f"{frame_id}.png"
+        confidence_path = confidence_dir / f"{frame_id}.png"
         if confidence_path.is_file():
             confidence = cv2.imread(str(confidence_path), cv2.IMREAD_UNCHANGED)
             if confidence is None:
@@ -309,6 +377,37 @@ def reconstruct_rgbd(capture_path: Path, output_dir: Path) -> dict:
             for value, count in zip(values, counts):
                 key = str(int(value))
                 confidence_histogram[key] = confidence_histogram.get(key, 0) + int(count)
+            if polycam:
+                if confidence.shape != depth.shape:
+                    raise ValueError(f"Polycam confidence and depth dimensions differ for {frame_id}.")
+                # Polycam encodes low/medium/high confidence as 0/127/255.
+                valid &= confidence[::pixel_stride, ::pixel_stride] > 0
+        if not np.any(valid):
+            continue
+
+        camera_points = np.column_stack((
+            ((u[valid] - cx) * z[valid] / fx),
+            ((v[valid] - cy) * z[valid] / fy),
+            z[valid],
+        ))
+        if polycam:
+            rotation = np.array([
+                [float(row[f"t_{i}{j}"]) for j in range(3)] for i in range(3)
+            ], dtype=np.float64)
+            translation = np.array(
+                [float(row[f"t_{i}3"]) for i in range(3)], dtype=np.float64
+            )
+            # Back-projection above uses CV axes (+x right, +y down, +z forward).
+            # Polycam poses use ARKit axes (+x right, +y up, -z forward).
+            camera_points[:, 1] *= -1
+            camera_points[:, 2] *= -1
+        else:
+            rotation = _quaternion_matrix(*(float(row[k]) for k in ("qx", "qy", "qz", "qw")))
+            translation = np.array([float(row[k]) for k in ("x", "y", "z")])
+        pose_translations.append(translation)
+        points_chunks.append(camera_points @ rotation.T + translation)
+        frame_colors = rgb_frames[frame_id][::pixel_stride, ::pixel_stride]
+        color_chunks.append(frame_colors[valid])
         processed += 1
 
     if not points_chunks:
@@ -357,7 +456,7 @@ def reconstruct_rgbd(capture_path: Path, output_dir: Path) -> dict:
 
     manifest = {
         "format_version": 1,
-        "capture_type": "rgbd",
+        "capture_type": source_format,
         "frames_available": len(frame_ids),
         "frames_sampled": processed,
         "frame_stride": frame_stride,
@@ -370,17 +469,33 @@ def reconstruct_rgbd(capture_path: Path, output_dir: Path) -> dict:
             "synchronization": video_sync,
         },
         "depth_scale_to_meters": depth_scale_to_meters,
-        "depth_unit_assumption": "PNG values interpreted as millimeters; dataset documentation did not confirm units.",
-        "camera_intrinsics": "Per-frame RGB-camera intrinsics scaled from 1920x1440 to the depth raster dimensions.",
-        "pose_convention_assumption": "CSV quaternion (qx,qy,qz,qw) and translation interpreted as camera-to-world, using standard right-handed quaternion rotation.",
+        "depth_unit_assumption": (
+            "Polycam raw depth PNG is documented as 16-bit millimeters."
+            if polycam else
+            "PNG values interpreted as millimeters; dataset documentation did not confirm units."
+        ),
+        "camera_intrinsics": "Per-frame RGB-camera intrinsics scaled to the matching depth raster dimensions.",
+        "pose_convention_assumption": (
+            "Polycam row-major camera-to-world pose; ARKit axes (+Y up, -Z forward) converted from CV back-projection axes."
+            if polycam else
+            "CSV quaternion (qx,qy,qz,qw) and translation interpreted as camera-to-world, using standard right-handed quaternion rotation."
+        ),
         "confidence_value_pixel_counts": confidence_histogram,
         "floor_return_analysis": floor_analysis,
         "wall_plane_analysis": wall_analysis,
         "artifacts": {"point_cloud": ply_path.name},
         "geometry_review_geojson": geometry_review_path.name,
         "limitations": [
-            "Depth units and pose convention are assumptions and need validation against dataset documentation or a known dimension.",
-            "RGB/depth pixel registration and the shared stream start time are inferred from matching aspect ratios, intrinsics, and nearly equal stream durations; they have not been independently ground-truthed.",
+            (
+                "Polycam depth units, ARKit pose convention, and axis conversion follow the published raw-data specification but still need validation against independent ground truth."
+                if polycam else
+                "Depth units and pose convention are assumptions and need validation against dataset documentation or a known dimension."
+            ),
+            (
+                "Polycam RGB, depth, and camera records are joined by their shared keyframe timestamp; corrected poses/images are used when both corrected folders exist."
+                if polycam else
+                "RGB/depth pixel registration and the shared stream start time are inferred from matching aspect ratios, intrinsics, and nearly equal stream durations; they have not been independently ground-truthed."
+            ),
             "This is a sampled point cloud, not a floor plan or a survey-grade metric model.",
             "Vertical plane patches and missing-return gaps are diagnostic candidates only; they are not verified walls, doors, windows, or room dimensions.",
             "Diagnostic plane extents are uncalibrated and have no validated confidence intervals.",
