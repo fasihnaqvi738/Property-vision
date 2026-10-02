@@ -16,6 +16,7 @@ def analyze_wall_planes(
     *,
     vertical_axis: str,
     provisional_floor_level_m: float,
+    floor_coverage_outline_xy: list[list[float]] | None = None,
     random_seed: int = 7,
 ) -> dict:
     points = np.asarray(points, dtype=np.float32)
@@ -134,10 +135,20 @@ def analyze_wall_planes(
     for index, plane in enumerate(planes):
         plane["candidate_id"] = f"wall_candidate_{index + 1}"
     boundaries = _find_closed_boundary_hypotheses(planes)
+    floor_outline = np.asarray(floor_coverage_outline_xy or [], dtype=np.float64)
+    boundary_alignment = _align_wall_spans_to_floor_outline(planes, floor_outline)
+    aligned_candidate_ids = {
+        item["candidate_id"] for item in boundary_alignment.get("wall_candidates", [])
+        if item.get("status") == "aligned_boundary_candidate"
+    }
+    intersection_cycles = _find_intersection_cycle_hypotheses(
+        planes, aligned_candidate_ids, floor_outline
+    )
+    boundaries["line_intersection_hypotheses"] = intersection_cycles
     preview_path = Path(output_dir) / "wall_plane_candidates.png"
     _write_preview(cloud, planes, v_axis, h_axes, preview_path)
     boundary_preview_path = Path(output_dir) / "wall_boundary_diagnostic.png"
-    _write_boundary_preview(planes, boundaries, boundary_preview_path)
+    _write_boundary_preview(planes, boundaries, floor_outline, boundary_alignment, boundary_preview_path)
     return {
         "status": "diagnostic_only",
         "vertical_axis": vertical_axis,
@@ -157,6 +168,7 @@ def analyze_wall_planes(
         },
         "wall_plane_candidates": planes,
         "room_boundary_hypotheses": boundaries,
+        "floor_coverage_alignment": boundary_alignment,
         "preview": preview_path.name,
         "boundary_preview": boundary_preview_path.name,
         "limitations": [
@@ -169,8 +181,254 @@ def analyze_wall_planes(
     }
 
 
-def _write_boundary_preview(planes: list[dict], boundaries: dict, path: Path) -> None:
-    """Render a top-down diagnostic of candidate spans and unresolved endpoint gaps."""
+def _align_wall_spans_to_floor_outline(planes: list[dict], outline: np.ndarray) -> dict:
+    """Compare wall spans to floor-return boundary evidence using provisional thresholds."""
+    if outline.ndim != 2 or outline.shape[1:] != (2,) or len(outline) < 4:
+        return {
+            "status": "unavailable",
+            "method": "Wall endpoint-to-floor-outline support comparison.",
+            "aligned_candidate_count": 0,
+            "candidate_count": len(planes),
+            "wall_candidates": [],
+            "limitations": ["A valid floor-coverage outline was not available for comparison."],
+        }
+
+    results = []
+    for plane in planes:
+        endpoints = np.asarray(plane.get("projected_endpoints_m", []), dtype=np.float64)
+        if endpoints.shape != (2, 2):
+            continue
+        direction = endpoints[1] - endpoints[0]
+        length = float(np.linalg.norm(direction))
+        if length < 1e-6:
+            continue
+        tangent = direction / length
+        normal = np.array([-tangent[1], tangent[0]])
+        relative = outline - endpoints[0]
+        along = relative @ tangent
+        perpendicular = np.abs(relative @ normal)
+        in_segment = (along >= -0.15) & (along <= length + 0.15)
+        support = in_segment & (perpendicular <= 0.20)
+        support_points = outline[support]
+        if len(support_points) >= 2:
+            support_along = (support_points - endpoints[0]) @ tangent
+            coverage = max(0.0, min(length, float(support_along.max())) - max(0.0, float(support_along.min()))) / length
+            offset = float(np.median(np.abs((support_points - endpoints[0]) @ normal)))
+        else:
+            coverage = 0.0
+            offset = None
+
+        if len(support_points) >= 3:
+            centered = support_points - support_points.mean(axis=0)
+            _, eigenvectors = np.linalg.eigh(centered.T @ centered)
+            principal = eigenvectors[:, -1]
+            angle = float(np.degrees(np.arccos(np.clip(abs(float(np.dot(principal, tangent))), -1.0, 1.0))))
+        else:
+            angle = None
+
+        aligned = (
+            len(support_points) >= 4
+            and offset is not None and offset <= 0.15
+            and angle is not None and angle <= 15.0
+            and coverage >= 0.25
+        )
+        results.append({
+            "candidate_id": plane.get("candidate_id"),
+            "status": "aligned_boundary_candidate" if aligned else "weak_or_unmatched",
+            "outline_support_point_count": int(len(support_points)),
+            "outline_coverage_ratio": round(float(coverage), 3),
+            "median_perpendicular_offset_m": round(offset, 3) if offset is not None else None,
+            "principal_direction_difference_degrees": round(angle, 2) if angle is not None else None,
+            "thresholds": {
+                "maximum_support_offset_m": 0.15,
+                "maximum_direction_difference_degrees": 15.0,
+                "minimum_outline_coverage_ratio": 0.25,
+                "minimum_support_points": 4,
+            },
+        })
+
+    return {
+        "status": "diagnostic_only",
+        "method": "Compare each fitted wall span with nearby points on the observed floor-coverage outline.",
+        "aligned_candidate_count": sum(item["status"] == "aligned_boundary_candidate" for item in results),
+        "candidate_count": len(results),
+        "wall_candidates": results,
+        "limitations": [
+            "Floor-return coverage can stop at furniture, occlusion, or incomplete scanning and is not a room footprint.",
+            "Alignment thresholds are provisional geometry filters and have not been calibrated or validated against ground truth.",
+            "An aligned candidate is not a semantic wall, room boundary, or measured surface.",
+        ],
+    }
+
+
+def _find_intersection_cycle_hypotheses(
+    planes: list[dict], aligned_candidate_ids: set[str], outline: np.ndarray,
+) -> dict:
+    """Split aligned wall spans at intersections and enumerate small planar faces."""
+    selected = [
+        plane for plane in planes
+        if plane.get("candidate_id") in aligned_candidate_ids
+        and len(plane.get("projected_endpoints_m", [])) == 2
+    ]
+    if len(selected) < 3:
+        return {
+            "status": "insufficient_candidates",
+            "method": "Planar faces from intersections of coverage-aligned wall spans.",
+            "candidate_count": 0,
+            "hypotheses": [],
+        }
+
+    split_points = []
+    for plane in selected:
+        endpoints = np.asarray(plane["projected_endpoints_m"], dtype=np.float64)
+        split_points.append([(0.0, endpoints[0]), (1.0, endpoints[1])])
+
+    def cross(a: np.ndarray, b: np.ndarray) -> float:
+        return float(a[0] * b[1] - a[1] * b[0])
+
+    for i in range(len(selected)):
+        a, b = (np.asarray(point, dtype=np.float64) for point in selected[i]["projected_endpoints_m"])
+        r = b - a
+        for j in range(i + 1, len(selected)):
+            c, d = (np.asarray(point, dtype=np.float64) for point in selected[j]["projected_endpoints_m"])
+            s = d - c
+            denominator = cross(r, s)
+            if abs(denominator) < 1e-7:
+                continue
+            delta = c - a
+            t = cross(delta, s) / denominator
+            u = cross(delta, r) / denominator
+            if -1e-6 <= t <= 1.0 + 1e-6 and -1e-6 <= u <= 1.0 + 1e-6:
+                point = a + np.clip(t, 0.0, 1.0) * r
+                split_points[i].append((float(np.clip(t, 0.0, 1.0)), point))
+                split_points[j].append((float(np.clip(u, 0.0, 1.0)), point))
+
+    nodes: list[np.ndarray] = []
+    segment_nodes: list[list[tuple[float, int]]] = []
+    snap_tolerance_m = 0.25
+    for points_on_segment in split_points:
+        assigned = []
+        for along, point in sorted(points_on_segment, key=lambda item: item[0]):
+            if nodes:
+                distances = [float(np.linalg.norm(point - node)) for node in nodes]
+                nearest = int(np.argmin(distances))
+                if distances[nearest] <= snap_tolerance_m:
+                    node_id = nearest
+                else:
+                    node_id = len(nodes)
+                    nodes.append(point.copy())
+            else:
+                node_id = 0
+                nodes.append(point.copy())
+            if not assigned or assigned[-1][1] != node_id:
+                assigned.append((along, node_id))
+        segment_nodes.append(assigned)
+
+    edge_support: dict[tuple[int, int], set[str]] = {}
+    for plane, assignments in zip(selected, segment_nodes):
+        for (_, node_a), (_, node_b) in zip(assignments, assignments[1:]):
+            if node_a == node_b or np.linalg.norm(nodes[node_a] - nodes[node_b]) < 0.25:
+                continue
+            edge = tuple(sorted((node_a, node_b)))
+            edge_support.setdefault(edge, set()).add(str(plane["candidate_id"]))
+    if len(edge_support) < 3:
+        return {
+            "status": "no_intersection_cycles",
+            "method": "Planar faces from intersections of coverage-aligned wall spans.",
+            "candidate_count": 0,
+            "hypotheses": [],
+        }
+
+    adjacency: dict[int, list[int]] = {}
+    for node_a, node_b in edge_support:
+        adjacency.setdefault(node_a, []).append(node_b)
+        adjacency.setdefault(node_b, []).append(node_a)
+    for node, neighbors in adjacency.items():
+        neighbors.sort(key=lambda other: float(np.arctan2(
+            nodes[other][1] - nodes[node][1], nodes[other][0] - nodes[node][0]
+        )))
+
+    visited: set[tuple[int, int]] = set()
+    canonical_cycles: set[tuple[int, ...]] = set()
+    hypotheses = []
+    for start_a, neighbors in adjacency.items():
+        for start_b in neighbors:
+            start_edge = (start_a, start_b)
+            if start_edge in visited:
+                continue
+            edge = start_edge
+            face_nodes = []
+            local_edges: set[tuple[int, int]] = set()
+            closed = False
+            for _ in range(max(20, len(edge_support) * 2 + 2)):
+                if edge in local_edges:
+                    break
+                local_edges.add(edge)
+                node_a, node_b = edge
+                face_nodes.append(node_a)
+                neighbors_at_b = adjacency[node_b]
+                reverse_index = neighbors_at_b.index(node_a)
+                next_node = neighbors_at_b[(reverse_index - 1) % len(neighbors_at_b)]
+                edge = (node_b, next_node)
+                if edge == start_edge:
+                    closed = True
+                    break
+            visited.update(local_edges)
+            if not closed or len(face_nodes) < 3 or len(face_nodes) > 12:
+                continue
+
+            rotations = [tuple(face_nodes[k:] + face_nodes[:k]) for k in range(len(face_nodes))]
+            reversed_nodes = list(reversed(face_nodes))
+            rotations.extend(tuple(reversed_nodes[k:] + reversed_nodes[:k]) for k in range(len(reversed_nodes)))
+            canonical = min(rotations)
+            if canonical in canonical_cycles:
+                continue
+            canonical_cycles.add(canonical)
+
+            polygon = np.asarray([nodes[node_id] for node_id in face_nodes], dtype=np.float64)
+            area = abs(float(np.dot(polygon[:, 0], np.roll(polygon[:, 1], -1)) -
+                                  np.dot(polygon[:, 1], np.roll(polygon[:, 0], -1)))) / 2.0
+            if not 0.50 <= area <= 60.0:
+                continue
+            center = polygon.mean(axis=0)
+            if len(outline) >= 4 and cv2.pointPolygonTest(
+                outline.astype(np.float32), tuple(center.astype(float)), False
+            ) < 0:
+                continue
+            support_ids = set()
+            for node_a, node_b in zip(face_nodes, face_nodes[1:] + face_nodes[:1]):
+                support_ids.update(edge_support.get(tuple(sorted((node_a, node_b))), set()))
+            hypotheses.append({
+                "hypothesis_id": f"intersection_cycle_{len(hypotheses) + 1}",
+                "status": "diagnostic_only",
+                "area_m2": round(area, 3),
+                "vertices_xy_m": [[round(float(x), 3), round(float(y), 3)] for x, y in polygon],
+                "supporting_wall_candidate_ids": sorted(support_ids),
+            })
+
+    hypotheses.sort(key=lambda item: item["area_m2"], reverse=True)
+    hypotheses = hypotheses[:20]
+    return {
+        "status": "diagnostic_only" if hypotheses else "no_intersection_cycles",
+        "method": "Split coverage-aligned wall spans at 2D intersections; enumerate bounded planar faces inside observed coverage.",
+        "candidate_count": len(hypotheses),
+        "snap_tolerance_m": snap_tolerance_m,
+        "minimum_candidate_area_m2": 0.50,
+        "maximum_candidate_area_m2": 60.0,
+        "hypotheses": hypotheses,
+        "limitations": [
+            "Intersections can be caused by pose drift or false wall fits; a closed face does not prove a room boundary.",
+            "Small openings, occluded wall runs, and disconnected or multi-room geometry are not resolved by this method.",
+            "Candidate areas and thresholds are uncalibrated and require comparison with labeled geometry.",
+        ],
+    }
+
+
+def _write_boundary_preview(
+    planes: list[dict], boundaries: dict, floor_outline: np.ndarray,
+    alignment: dict, path: Path,
+) -> None:
+    """Render a top-down diagnostic of floor coverage, candidate spans, and gaps."""
     canvas = np.full((900, 1200, 3), 250, dtype=np.uint8)
     segments = [
         np.asarray(plane["projected_endpoints_m"], dtype=np.float64)
@@ -183,7 +441,10 @@ def _write_boundary_preview(planes: list[dict], boundaries: dict, path: Path) ->
         cv2.imwrite(str(path), canvas)
         return
 
-    endpoints = np.concatenate(segments, axis=0)
+    extent_items = [np.concatenate(segments, axis=0)]
+    if floor_outline.ndim == 2 and floor_outline.shape[1:] == (2,) and len(floor_outline) >= 3:
+        extent_items.append(floor_outline)
+    endpoints = np.concatenate(extent_items, axis=0)
     low = endpoints.min(axis=0)
     high = endpoints.max(axis=0)
     span = np.maximum(high - low, 0.5)
@@ -199,6 +460,18 @@ def _write_boundary_preview(planes: list[dict], boundaries: dict, path: Path) ->
         relative = (np.asarray(point, dtype=np.float64) - low) * scale
         return int(origin[0] + relative[0]), int(origin[1] - relative[1])
 
+    if floor_outline.ndim == 2 and floor_outline.shape[1:] == (2,) and len(floor_outline) >= 3:
+        polygon = np.asarray([pixel(point) for point in floor_outline], dtype=np.int32).reshape(-1, 1, 2)
+        cv2.polylines(canvas, [polygon], True, (90, 90, 90), 2, cv2.LINE_AA)
+        cv2.putText(canvas, "observed floor coverage", (int(np.min(polygon[:, 0, 0])),
+                    max(58, int(np.min(polygon[:, 0, 1])) - 8)),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.48, (70, 70, 70), 1, cv2.LINE_AA)
+
+    aligned_ids = {
+        item.get("candidate_id") for item in alignment.get("wall_candidates", [])
+        if item.get("status") == "aligned_boundary_candidate"
+    }
+
     cv2.putText(canvas, "Wall boundary candidates (diagnostic only)", (40, 38),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.85, (35, 35, 35), 2, cv2.LINE_AA)
     for index, plane in enumerate(planes):
@@ -206,7 +479,8 @@ def _write_boundary_preview(planes: list[dict], boundaries: dict, path: Path) ->
         if len(points) != 2:
             continue
         a, b = pixel(np.asarray(points[0])), pixel(np.asarray(points[1]))
-        cv2.line(canvas, a, b, (180, 110, 20), 3, cv2.LINE_AA)
+        color = (30, 150, 30) if plane.get("candidate_id") in aligned_ids else (180, 110, 20)
+        cv2.line(canvas, a, b, color, 3, cv2.LINE_AA)
         cv2.circle(canvas, a, 6, (20, 130, 230), -1, cv2.LINE_AA)
         cv2.circle(canvas, b, 6, (20, 130, 230), -1, cv2.LINE_AA)
         label = plane.get("candidate_id", f"candidate_{index + 1}")
@@ -231,7 +505,18 @@ def _write_boundary_preview(planes: list[dict], boundaries: dict, path: Path) ->
         cv2.putText(canvas, f"unclosed {distance:.2f} m", (mid[0] + 5, mid[1] - 7),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.45, (40, 40, 220), 1, cv2.LINE_AA)
 
-    cv2.putText(canvas, "Orange: observed endpoints   Blue: fitted wall spans   Red: unresolved gaps",
+    for hypothesis in boundaries.get("line_intersection_hypotheses", {}).get("hypotheses", []):
+        vertices = hypothesis.get("vertices_xy_m", [])
+        if len(vertices) < 3:
+            continue
+        polygon = np.asarray([pixel(np.asarray(point)) for point in vertices], dtype=np.int32).reshape(-1, 1, 2)
+        cv2.polylines(canvas, [polygon], True, (200, 0, 200), 3, cv2.LINE_AA)
+        center = tuple(np.round(polygon[:, 0, :].mean(axis=0)).astype(int))
+        cv2.putText(canvas, f"face candidate {hypothesis['area_m2']:.2f} m^2",
+                    (center[0] + 6, center[1] - 8), cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5, (180, 0, 180), 1, cv2.LINE_AA)
+
+    cv2.putText(canvas, "Orange: endpoints   Blue: unmatched spans   Green: aligned spans   Purple: face candidate   Red: gap",
                 (40, 865), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (50, 50, 50), 1, cv2.LINE_AA)
     cv2.imwrite(str(path), canvas)
 

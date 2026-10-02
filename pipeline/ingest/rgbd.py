@@ -225,6 +225,9 @@ def reconstruct_rgbd(capture_path: Path, output_dir: Path) -> dict:
                 output_dir,
                 vertical_axis=floor_analysis["vertical_axis"],
                 provisional_floor_level_m=floor_analysis["provisional_floor_level_m"],
+                floor_coverage_outline_xy=(
+                    floor_analysis.get("largest_component_coverage_outline", {}).get("vertices_m")
+                ),
             )
         except (ValueError, IOError, cv2.error, np.linalg.LinAlgError) as error:
             wall_analysis = {
