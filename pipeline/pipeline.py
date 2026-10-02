@@ -1,119 +1,53 @@
-import numpy as np
+import json
+from datetime import datetime, timezone
+from pathlib import Path
 
 from pipeline.ingest.capture import load_capture
-from pipeline.geometry.features import detect_features, match_features
-from pipeline.geometry.matching import (
-    get_matched_points,
-    estimate_homography,
-)
-from pipeline.geometry.pose_estimation import estimate_camera_pose
-from pipeline.geometry.pose import CameraPose
-from pipeline.geometry.triangulation import triangulate_points
-from pipeline.geometry.planes import fit_plane_ransac
+from pipeline.ingest.types import CaptureType
+from pipeline.reconstruction.colmap import reconstruct_from_images
 
 
-def run_pipeline(input_path: str):
+def run_pipeline(input_path: str, output_root: str = "outputs") -> Path:
     capture = load_capture(input_path)
-
-    print("Capture ready")
-    print("Path:", capture.path)
-    print("Type:", capture.capture_type.value)
-    print("Photos loaded:", len(capture.photos))
-    print("Tier:", capture.metadata.tier)
-
-    if len(capture.photos) < 2:
-        return
-
-    for i in range(len(capture.photos) - 1):
-        image1 = capture.photos[i]
-        image2 = capture.photos[i + 1]
-
-        keypoints1, descriptors1 = detect_features(image1)
-        keypoints2, descriptors2 = detect_features(image2)
-
-        matches = match_features(
-            descriptors1,
-            descriptors2,
+    if capture.capture_type is not CaptureType.PHOTO:
+        raise NotImplementedError(
+            f"The photo reconstruction workflow does not support "
+            f"{capture.capture_type.value} captures yet."
         )
 
-        print(
-            f"Pair {i + 1}-{i + 2}: "
-            f"{len(matches)} matches"
+    photo_files = sorted(
+        path for path in capture.path.iterdir()
+        if path.is_file() and path.suffix.lower() in {".jpg", ".jpeg", ".png"}
+    )
+    if not photo_files:
+        raise ValueError(
+            f"No JPEG or PNG photos found directly inside {capture.path}."
         )
 
-        if len(matches) < 4:
-            continue
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    run_dir = Path(output_root) / f"{capture.path.name}_{timestamp}"
+    models = reconstruct_from_images(capture.path, run_dir / "reconstruction")
 
-        points1, points2 = get_matched_points(
-            keypoints1,
-            keypoints2,
-            matches,
-        )
-
-        matrix, mask = estimate_homography(
-            points1,
-            points2,
-        )
-
-        print(
-            "Homography estimated:",
-            matrix is not None,
-        )
-
-        if mask is not None:
-            print("Inliers:", int(mask.sum()))
-
-        height, width = image1.shape[:2]
-
-        focal_length = width
-
-        camera_matrix = np.array([
-            [focal_length, 0, width / 2],
-            [0, focal_length, height / 2],
-            [0, 0, 1],
-        ], dtype=np.float64)
-
-        rotation, translation, pose_mask = estimate_camera_pose(
-            points1,
-            points2,
-            camera_matrix,
-        )
-
-        print(
-            "Rotation estimated:",
-            rotation is not None,
-        )
-
-        print(
-            "Translation estimated:",
-            translation is not None,
-        )
-
-        if rotation is None or translation is None:
-            continue
-
-        pose = CameraPose(
-            rotation=rotation,
-            translation=translation,
-        )
-
-        print("Pose stored:", pose is not None)
-
-        points_3d = triangulate_points(
-            points1,
-            points2,
-            camera_matrix,
-            rotation,
-            translation,
-        )
-
-        print("3D points:", len(points_3d))
-
-        plane_result = fit_plane_ransac(points_3d)
-
-        if plane_result is not None:
-            plane, inliers = plane_result
-
-            print("Plane normal:", plane[0])
-            print("Plane distance:", plane[1])
-            print("Plane inliers:", len(inliers))
+    result = {
+        "format_version": 1,
+        "capture": {
+            "path": str(capture.path.resolve()),
+            "tier": capture.metadata.tier.value,
+            "photo_count": len(photo_files),
+            "photos": [path.name for path in photo_files],
+        },
+        "reconstruction": {
+            "engine": "COLMAP",
+            "status": "success",
+            "models": models,
+            "scale": "arbitrary",
+            "limitations": [
+                "Monocular photo reconstruction has no metric scale without a known dimension or depth sensor.",
+                "This output is a sparse 3D reconstruction, not a measured floor plan.",
+            ],
+        },
+    }
+    run_dir.mkdir(parents=True, exist_ok=True)
+    result_path = run_dir / "result.json"
+    result_path.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    return result_path
