@@ -51,6 +51,11 @@
         "status": { "$ref": "#/$defs/status" },
         "coordinate_system": { "type": "string" },
         "rooms": { "type": "array", "items": { "$ref": "#/$defs/room" } },
+        "boundary_hypotheses": {
+          "type": "array",
+          "description": "Unverified geometric faces for review; these are not accepted rooms or measurements.",
+          "items": { "$ref": "#/$defs/boundaryHypothesis" }
+        },
         "stitched_plan": {
           "type": "object",
           "additionalProperties": false,
@@ -240,6 +245,30 @@
       "prefixItems": [{ "type": "number" }, { "type": "number" }],
       "minItems": 2,
       "maxItems": 2
+    },
+    "boundaryHypothesis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidate_id", "status", "vertices_xy_m", "area_m2", "side_lengths_m", "interior_angles_degrees", "supporting_wall_candidate_ids", "measurement_uncertainty"],
+      "properties": {
+        "candidate_id": { "type": "string", "minLength": 1 },
+        "status": { "const": "diagnostic_only" },
+        "vertices_xy_m": { "type": "array", "minItems": 3, "items": { "$ref": "#/$defs/point2" } },
+        "area_m2": { "type": "number", "exclusiveMinimum": 0 },
+        "side_lengths_m": { "type": "array", "minItems": 3, "items": { "type": "number", "exclusiveMinimum": 0 } },
+        "interior_angles_degrees": { "type": "array", "minItems": 3, "items": { "type": "number", "minimum": 0, "maximum": 180 } },
+        "supporting_wall_candidate_ids": { "type": "array", "items": { "type": "string" } },
+        "measurement_uncertainty": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "confidence_interval_m2", "reason"],
+          "properties": {
+            "status": { "const": "uncalibrated" },
+            "confidence_interval_m2": { "type": "null" },
+            "reason": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
     },
     "calibration": {
       "type": "object",

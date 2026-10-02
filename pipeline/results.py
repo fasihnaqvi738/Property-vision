@@ -33,6 +33,7 @@ def build_result(
     limitations: list[str],
     raw_capture: list[str] | None = None,
     debug_views: list[str] | None = None,
+    boundary_hypotheses: list[dict] | None = None,
 ) -> dict:
     """Build the honest shared envelope; unsupported product outputs stay explicit."""
     return {
@@ -54,6 +55,7 @@ def build_result(
             "status": "unavailable",
             "coordinate_system": "world frame; metres assumed where sensor poses provide scale",
             "rooms": [],
+            "boundary_hypotheses": boundary_hypotheses or [],
             "stitched_plan": {
                 "status": "unavailable",
                 "adjacency": [],

@@ -18,6 +18,27 @@ def _write_result(result: dict, result_path: Path) -> Path:
     return result_path
 
 
+def _serialize_boundary_hypotheses(hypotheses: list[dict]) -> list[dict]:
+    """Expose reviewable candidate geometry without asserting semantic rooms."""
+    serialized = []
+    for hypothesis in hypotheses:
+        serialized.append({
+            "candidate_id": hypothesis["hypothesis_id"],
+            "status": "diagnostic_only",
+            "vertices_xy_m": hypothesis["vertices_xy_m"],
+            "area_m2": hypothesis["area_m2"],
+            "side_lengths_m": [edge["length_m"] for edge in hypothesis.get("edges", [])],
+            "interior_angles_degrees": hypothesis.get("interior_angles_degrees", []),
+            "supporting_wall_candidate_ids": hypothesis.get("supporting_wall_candidate_ids", []),
+            "measurement_uncertainty": {
+                "status": "uncalibrated",
+                "confidence_interval_m2": None,
+                "reason": "No independent ground truth or calibrated error model is available.",
+            },
+        })
+    return serialized
+
+
 def run_pipeline(input_path: str, output_root: str = "outputs") -> Path:
     capture = load_capture(input_path)
     if capture.capture_type is CaptureType.RGBD:
@@ -41,6 +62,12 @@ def run_pipeline(input_path: str, output_root: str = "outputs") -> Path:
             point_cloud=str(run_dir / "rgbd_point_cloud.ply"),
             limitations=summary["limitations"],
             raw_capture=[str(capture.path.resolve())],
+            boundary_hypotheses=_serialize_boundary_hypotheses(
+                summary.get("wall_plane_analysis", {})
+                .get("room_boundary_hypotheses", {})
+                .get("line_intersection_hypotheses", {})
+                .get("hypotheses", [])
+            ),
             debug_views=[
                 str(run_dir / summary[key]["preview"])
                 for key in ("floor_return_analysis", "wall_plane_analysis")
