@@ -11,6 +11,7 @@ def detect_capture_type(input_path: str) -> CaptureType:
     if (
         (path / "depth").is_dir()
         and (path / "confidence").is_dir()
+        and (path / "rgb.mp4").is_file()
         and (path / "odometry.csv").is_file()
         and (path / "camera_matrix.csv").is_file()
     ):

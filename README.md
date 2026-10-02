@@ -46,7 +46,7 @@ The supplied RGB-D bundle can be passed directly as the capture folder. It must 
 python main.py "captures\c00a170fe1"
 ```
 
-This creates `rgbd_point_cloud.ply` and `result.json` in a timestamped output folder. The initial export samples every tenth depth frame and every fourth pixel. It treats depth values as millimeters and odometry poses as camera-to-world transforms; both assumptions are recorded in the manifest and need validation before treating the cloud as metric. The RGB video is not yet used for color because frame timing and image-to-depth alignment have not been verified. This stage exports a point cloud only; it does not create a floor plan or room measurements.
+This creates a colored `rgbd_point_cloud.ply` and `result.json` in a timestamped output folder. The export samples every tenth depth frame and every fourth pixel. It matches RGB presentation timestamps to the depth odometry timestamps, and records the time offsets and alignment assumptions in the manifest. It treats depth values as millimeters and odometry poses as camera-to-world transforms; these assumptions still need validation before treating the cloud as metric. This stage exports a point cloud only; it does not create a floor plan or room measurements.
 
 ## Current limitations
 
