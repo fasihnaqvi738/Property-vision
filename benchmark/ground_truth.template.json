@@ -1,0 +1,38 @@
+{
+  "benchmark_id": "property_01_2026-10",
+  "property": {
+    "footprint_m2": null,
+    "adjacency": []
+  },
+  "ground_truth_rooms": [
+    {
+      "room_id": "R01",
+      "ceiling_height_m": null,
+      "floor_area_m2": null,
+      "walls": [],
+      "openings": []
+    },
+    {
+      "room_id": "R02",
+      "ceiling_height_m": null,
+      "floor_area_m2": null,
+      "walls": [],
+      "openings": []
+    },
+    {
+      "room_id": "R03",
+      "ceiling_height_m": null,
+      "floor_area_m2": null,
+      "walls": [],
+      "openings": []
+    },
+    {
+      "room_id": "C01",
+      "ceiling_height_m": null,
+      "floor_area_m2": null,
+      "walls": [],
+      "openings": []
+    }
+  ],
+  "runs": []
+}

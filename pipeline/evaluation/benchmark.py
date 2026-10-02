@@ -55,6 +55,108 @@ def _result_path(manifest_path: Path, value: str) -> Path:
     return path if path.is_absolute() else (manifest_path.parent / path).resolve()
 
 
+def _validate_manifest(manifest: dict, manifest_path: Path) -> None:
+    """Fail early with actionable errors instead of opaque KeyError/lookup failures."""
+    errors = []
+    if not isinstance(manifest, dict):
+        raise ValueError("Benchmark manifest must be a JSON object.")
+    if not isinstance(manifest.get("benchmark_id"), str) or not manifest["benchmark_id"].strip():
+        errors.append("benchmark_id must be a non-empty string.")
+    property_truth = manifest.get("property", {})
+    if not isinstance(property_truth, dict):
+        errors.append("property must be an object.")
+    else:
+        footprint = property_truth.get("footprint_m2")
+        if footprint is not None and (
+            not isinstance(footprint, (int, float)) or isinstance(footprint, bool) or footprint <= 0
+        ):
+            errors.append("property.footprint_m2 must be a positive number or null.")
+        adjacency = property_truth.get("adjacency", [])
+        if not isinstance(adjacency, list):
+            errors.append("property.adjacency must be an array.")
+        else:
+            for edge_index, edge in enumerate(adjacency):
+                if not isinstance(edge, dict) or not isinstance(edge.get("room_a"), str) or not isinstance(edge.get("room_b"), str):
+                    errors.append(f"property.adjacency[{edge_index}] must include string room_a and room_b IDs.")
+    rooms = manifest.get("ground_truth_rooms")
+    if not isinstance(rooms, list) or not rooms:
+        errors.append("ground_truth_rooms must be a non-empty array.")
+        rooms = []
+    room_ids = set()
+    for index, room in enumerate(rooms):
+        label = f"ground_truth_rooms[{index}]"
+        if not isinstance(room, dict):
+            errors.append(f"{label} must be an object.")
+            continue
+        room_id = room.get("room_id")
+        if not isinstance(room_id, str) or not room_id.strip():
+            errors.append(f"{label}.room_id must be a non-empty string.")
+        elif room_id in room_ids:
+            errors.append(f"Duplicate room_id: {room_id}.")
+        else:
+            room_ids.add(room_id)
+        for collection in ("walls", "openings"):
+            if not isinstance(room.get(collection, []), list):
+                errors.append(f"{label}.{collection} must be an array.")
+            else:
+                id_key, value_key = ("wall_id", "length_m") if collection == "walls" else ("opening_id", "width_m")
+                seen = set()
+                for item_index, item in enumerate(room.get(collection, [])):
+                    item_label = f"{label}.{collection}[{item_index}]"
+                    if not isinstance(item, dict):
+                        errors.append(f"{item_label} must be an object.")
+                        continue
+                    item_id, value = item.get(id_key), item.get(value_key)
+                    if not isinstance(item_id, str) or not item_id.strip():
+                        errors.append(f"{item_label}.{id_key} must be a non-empty string.")
+                    elif item_id in seen:
+                        errors.append(f"Duplicate {id_key} in {label}: {item_id}.")
+                    else:
+                        seen.add(item_id)
+                    if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0:
+                        errors.append(f"{item_label}.{value_key} must be a positive number.")
+        for key in ("ceiling_height_m", "floor_area_m2"):
+            value = room.get(key)
+            if value is not None and (not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0):
+                errors.append(f"{label}.{key} must be a positive number or null.")
+
+    runs = manifest.get("runs")
+    if not isinstance(runs, list):
+        errors.append("runs must be an array.")
+        runs = []
+    for index, run in enumerate(runs):
+        label = f"runs[{index}]"
+        if not isinstance(run, dict):
+            errors.append(f"{label} must be an object.")
+            continue
+        if run.get("tier") not in {"photo", "video", "lidar"}:
+            errors.append(f"{label}.tier must be photo, video, or lidar.")
+        if str(run.get("room_id", "")) not in room_ids:
+            errors.append(f"{label}.room_id must match a declared ground-truth room_id.")
+        result_json = run.get("result_json")
+        if not isinstance(result_json, str) or not result_json.strip():
+            errors.append(f"{label}.result_json must point to a saved result.json.")
+        elif not _result_path(manifest_path, result_json).is_file():
+            errors.append(f"{label}.result_json was not found: {_result_path(manifest_path, result_json)}")
+        for collection in ("wall_matches", "opening_matches"):
+            if collection in run and not isinstance(run[collection], list):
+                errors.append(f"{label}.{collection} must be an array.")
+        if "phantom_opening_prediction_ids" in run and not isinstance(run["phantom_opening_prediction_ids"], list):
+            errors.append(f"{label}.phantom_opening_prediction_ids must be an array.")
+        if "room_matches" in run and not isinstance(run["room_matches"], dict):
+            errors.append(f"{label}.room_matches must be an object.")
+        for collection, keys in (("wall_matches", ("ground_truth_wall_id", "prediction_surface_id")),
+                                 ("opening_matches", ("ground_truth_opening_id", "prediction_opening_id"))):
+            matches = run.get(collection, [])
+            if not isinstance(matches, list):
+                continue
+            for match_index, match in enumerate(matches):
+                if not isinstance(match, dict) or keys[0] not in match or keys[1] not in match:
+                    errors.append(f"{label}.{collection}[{match_index}] must include {keys[0]} and {keys[1]}.")
+    if errors:
+        raise ValueError("Invalid benchmark manifest:\n- " + "\n- ".join(errors))
+
+
 def _record_metric(rows: list[dict], *, tier: str, capture_id: str, room_id: str,
                    metric: str, object_id: str, ground_truth: float,
                    prediction: dict | None, tolerance: float | None = None,
@@ -86,6 +188,7 @@ def _record_metric(rows: list[dict], *, tier: str, capture_id: str, room_id: str
 def evaluate(manifest_path: Path) -> dict:
     manifest_path = manifest_path.resolve()
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    _validate_manifest(manifest, manifest_path)
     rooms = _index(manifest.get("ground_truth_rooms", []), "room_id")
     runs = manifest.get("runs", [])
     property_truth = manifest.get("property", {})
@@ -99,6 +202,8 @@ def evaluate(manifest_path: Path) -> dict:
     for run in runs:
         result_path = _result_path(manifest_path, run["result_json"])
         result = json.loads(result_path.read_text(encoding="utf-8"))
+        if not isinstance(result, dict) or not isinstance(result.get("capture"), dict):
+            raise ValueError(f"Result must contain a capture object: {result_path}")
         tier = run["tier"]
         capture_id = run.get("capture_id", result.get("capture", {}).get("capture_id", result_path.stem))
         gt_room_id = str(run["room_id"])
