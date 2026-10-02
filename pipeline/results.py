@@ -20,6 +20,52 @@ def _unavailable_calibration() -> dict:
     }
 
 
+def _serialize_candidate_room_plans(boundary_hypotheses: list[dict]) -> list[dict]:
+    """Expose metric-looking boundary faces as review candidates, never accepted rooms."""
+    candidates = []
+    for hypothesis in boundary_hypotheses:
+        method = (
+            "Diagnostic room-shaped face from fitted wall intersections; values are provisional "
+            "and have no ground-truth-calibrated confidence interval."
+        )
+        candidates.append({
+            "candidate_id": str(hypothesis["candidate_id"]),
+            "status": "diagnostic_only",
+            "footprint": hypothesis.get("vertices_xy_m", []),
+            "floor_area": {
+                "status": "partial",
+                "value": hypothesis.get("area_m2"),
+                "unit": "m^2",
+                "interval": None,
+                "method": method,
+            },
+            "walls": [
+                {
+                    "side_id": f"side_{index}",
+                    "length": {
+                        "status": "partial",
+                        "value": length,
+                        "unit": "m",
+                        "interval": None,
+                        "method": method,
+                    },
+                    "supporting_wall_candidate_ids": list(
+                        hypothesis.get("side_supporting_wall_candidate_ids", [])[index - 1]
+                        if len(hypothesis.get("side_supporting_wall_candidate_ids", [])) >= index
+                        else hypothesis.get("supporting_wall_candidate_ids", [])
+                    ),
+                }
+                for index, length in enumerate(hypothesis.get("side_lengths_m", []), start=1)
+            ],
+            "ceiling_height": _unavailable_measurement(
+                "m", "No complete, ground-truthed room ceiling plane was identified."
+            ),
+            "opening_detection_status": "unavailable",
+            "supporting_wall_candidate_ids": list(hypothesis.get("supporting_wall_candidate_ids", [])),
+        })
+    return candidates
+
+
 def build_result(
     *,
     capture_id: str,
@@ -34,6 +80,7 @@ def build_result(
     raw_capture: list[str] | None = None,
     debug_views: list[str] | None = None,
     boundary_hypotheses: list[dict] | None = None,
+    drift_handling: dict | None = None,
 ) -> dict:
     """Build the honest shared envelope; unsupported product outputs stay explicit."""
     return {
@@ -55,6 +102,7 @@ def build_result(
             "status": "unavailable",
             "coordinate_system": "world frame; metres assumed where sensor poses provide scale",
             "rooms": [],
+            "room_candidates": _serialize_candidate_room_plans(boundary_hypotheses or []),
             "boundary_hypotheses": boundary_hypotheses or [],
             "stitched_plan": {
                 "status": "unavailable",
@@ -67,7 +115,7 @@ def build_result(
         "concealed_damage_flags": [],
         "scope_line_items": [],
         "quality": {
-            "drift_handling": {
+            "drift_handling": drift_handling or {
                 "status": "unavailable",
                 "method": "Input poses are used as supplied; loop closure and pose-graph correction are not implemented.",
                 "ablation_artifact": None,

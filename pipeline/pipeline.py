@@ -33,6 +33,14 @@ def _serialize_boundary_hypotheses(hypotheses: list[dict]) -> list[dict]:
             "vertices_xy_m": hypothesis["vertices_xy_m"],
             "area_m2": hypothesis["area_m2"],
             "side_lengths_m": [edge["length_m"] for edge in hypothesis.get("edges", [])],
+            "side_supporting_wall_candidate_ids": [
+                sorted({
+                    str(support["candidate_id"])
+                    for support in edge.get("supporting_wall_candidates", [])
+                    if support.get("candidate_id")
+                })
+                for edge in hypothesis.get("edges", [])
+            ],
             "interior_angles_degrees": hypothesis.get("interior_angles_degrees", []),
             "supporting_wall_candidate_ids": hypothesis.get("supporting_wall_candidate_ids", []),
             "measurement_uncertainty": {
@@ -371,10 +379,17 @@ def run_pipeline(input_path: str, output_root: str = "outputs", *, pose_mode: st
         plan_rooms = []
         all_input_files = []
         for room_id, folder, images in room_inputs:
-            models = reconstruct_from_images(
-                folder, run_dir / "reconstruction" / room_id,
-                **reconstruction_settings,
-            )
+            room_error = None
+            try:
+                models = reconstruct_from_images(
+                    folder, run_dir / "reconstruction" / room_id,
+                    **reconstruction_settings,
+                )
+            except RuntimeError as error:
+                # A weak room must not discard useful results from the other
+                # rooms or prevent the cross-room matching diagnostic.
+                models = []
+                room_error = str(error)
             primary = max(
                 models,
                 key=lambda model: (model["registered_images"], model["sparse_points"]),
@@ -382,6 +397,7 @@ def run_pipeline(input_path: str, output_root: str = "outputs", *, pose_mode: st
             )
             per_room.append({
                 "room_id": room_id,
+                "status": "complete" if models else "failed",
                 "input_photo_count": len(images),
                 "models": models,
                 "primary_model_id": primary["model_id"] if primary else None,
@@ -391,6 +407,7 @@ def run_pipeline(input_path: str, output_root: str = "outputs", *, pose_mode: st
                 "registered_image_memberships": sum(
                     model["registered_images"] for model in models
                 ),
+                "failure_reason": room_error,
             })
             all_input_files.extend(str(Path(room_id) / image.name) for image in images)
             plan_rooms.append(_unavailable_room_plan(room_id))
@@ -440,6 +457,84 @@ def run_pipeline(input_path: str, output_root: str = "outputs", *, pose_mode: st
             if largest_joint_model else []
         )
         largest_joint_rooms = largest_joint_model["registered_room_ids"] if largest_joint_model else []
+
+        # COLMAP text image records include camera poses in one shared but
+        # arbitrary coordinate frame. Use their centers to report whether
+        # folders are linked in the reconstruction; these are not room
+        # boundaries, gravity-aligned plan coordinates, or metric dimensions.
+        room_pose_points = {room_id: [] for room_id, _, _ in room_inputs}
+        cross_room_links = set()
+        for model in joint_model_summaries:
+            model_rooms = model["registered_room_ids"]
+            for index, room_a in enumerate(model_rooms):
+                for room_b in model_rooms[index + 1:]:
+                    cross_room_links.add((room_a, room_b))
+            image_records = Path(model["model_text_dir"]) / "images.txt"
+            if not image_records.is_file():
+                continue
+            for line in image_records.read_text(encoding="utf-8").splitlines():
+                if not line.strip() or line.startswith("#"):
+                    continue
+                fields = line.split(maxsplit=9)
+                if len(fields) != 10:
+                    continue
+                try:
+                    qw, qx, qy, qz = map(float, fields[1:5])
+                    tx, ty, tz = map(float, fields[5:8])
+                except ValueError:
+                    continue
+                image_name = fields[9]
+                room_id = next(
+                    (candidate for candidate, _, _ in room_inputs
+                     if image_name.startswith(f"{candidate}__")),
+                    None,
+                )
+                if room_id is None:
+                    continue
+                # COLMAP stores world-to-camera quaternion/translation.
+                rotation = [
+                    [1 - 2 * (qy*qy + qz*qz), 2 * (qx*qy - qz*qw), 2 * (qx*qz + qy*qw)],
+                    [2 * (qx*qy + qz*qw), 1 - 2 * (qx*qx + qz*qz), 2 * (qy*qz - qx*qw)],
+                    [2 * (qx*qz - qy*qw), 2 * (qy*qz + qx*qw), 1 - 2 * (qx*qx + qy*qy)],
+                ]
+                translation = (tx, ty, tz)
+                center = tuple(
+                    -sum(rotation[row][axis] * translation[row] for row in range(3))
+                    for axis in range(3)
+                )
+                room_pose_points[room_id].append(center)
+
+        room_pose_summary = []
+        for room_id, points in room_pose_points.items():
+            if not points:
+                room_pose_summary.append({"room_id": room_id, "registered_camera_count": 0,
+                                          "centroid_sfm_xyz": None, "span_sfm_xyz": None})
+                continue
+            centroid = [sum(point[axis] for point in points) / len(points) for axis in range(3)]
+            span = [max(point[axis] for point in points) - min(point[axis] for point in points)
+                    for axis in range(3)]
+            room_pose_summary.append({
+                "room_id": room_id,
+                "registered_camera_count": len(points),
+                "centroid_sfm_xyz": [round(value, 6) for value in centroid],
+                "span_sfm_xyz": [round(value, 6) for value in span],
+            })
+        photo_pose_diagnostic = {
+            "status": "diagnostic_only" if cross_room_links else "unavailable",
+            "coordinate_frame": "arbitrary COLMAP SfM coordinates; not gravity aligned or metric",
+            "rooms": room_pose_summary,
+            "shared_model_room_pairs": [
+                {"room_a": room_a, "room_b": room_b, "status": "visual_model_connectivity_only"}
+                for room_a, room_b in sorted(cross_room_links)
+            ],
+            "adjacency": "unavailable; shared SfM model membership does not prove a doorway or room adjacency",
+            "footprint": "unavailable; camera centers do not define room boundaries",
+        }
+        from pipeline.geometry.render_photo_poses import render_photo_pose_diagnostic
+        photo_pose_review = render_photo_pose_diagnostic(
+            photo_pose_diagnostic, run_dir / "photo_pose_review.svg"
+        )
+        photo_pose_diagnostic["review_svg"] = str(photo_pose_review)
 
         limitations = [
             "Each photo subfolder is reconstructed independently; camera poses do not place rooms in a shared property frame.",
@@ -491,6 +586,7 @@ def run_pipeline(input_path: str, output_root: str = "outputs", *, pose_mode: st
                     "failure_reason": joint_error,
                     "point_clouds_are_metric_oriented_or_room_segmented": False,
                 },
+                "cross_room_pose_diagnostic": photo_pose_diagnostic,
             },
             point_cloud=None,
             limitations=limitations,
@@ -499,6 +595,7 @@ def run_pipeline(input_path: str, output_root: str = "outputs", *, pose_mode: st
         result["property_plan"]["status"] = "partial"
         result["property_plan"]["rooms"] = plan_rooms
         result["property_plan"]["stitched_plan"]["status"] = "unavailable"
+        result["artifacts"]["debug_views"] = [str(photo_pose_review)]
         return _write_result(result, run_dir / "result.json", started_at)
 
     if not photo_files:

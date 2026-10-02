@@ -51,6 +51,11 @@
         "status": { "$ref": "#/$defs/status" },
         "coordinate_system": { "type": "string" },
         "rooms": { "type": "array", "items": { "$ref": "#/$defs/room" } },
+        "room_candidates": {
+          "type": "array",
+          "description": "Review-only room-shaped boundary candidates; these are not accepted or ground-truthed rooms.",
+          "items": { "$ref": "#/$defs/candidateRoomPlan" }
+        },
         "boundary_hypotheses": {
           "type": "array",
           "description": "Unverified geometric faces for review; these are not accepted rooms or measurements.",
@@ -263,6 +268,33 @@
         }
       }
     },
+    "candidateRoomPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidate_id", "status", "footprint", "floor_area", "walls", "ceiling_height", "opening_detection_status", "supporting_wall_candidate_ids"],
+      "properties": {
+        "candidate_id": { "type": "string", "minLength": 1 },
+        "status": { "const": "diagnostic_only" },
+        "footprint": { "type": "array", "minItems": 3, "items": { "$ref": "#/$defs/point2" } },
+        "floor_area": { "$ref": "#/$defs/measurement" },
+        "walls": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["side_id", "length", "supporting_wall_candidate_ids"],
+            "properties": {
+              "side_id": { "type": "string", "minLength": 1 },
+              "length": { "$ref": "#/$defs/measurement" },
+              "supporting_wall_candidate_ids": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        },
+        "ceiling_height": { "$ref": "#/$defs/measurement" },
+        "opening_detection_status": { "$ref": "#/$defs/status" },
+        "supporting_wall_candidate_ids": { "type": "array", "items": { "type": "string" } }
+      }
+    },
     "point2": {
       "type": "array",
       "prefixItems": [{ "type": "number" }, { "type": "number" }],
@@ -279,6 +311,10 @@
         "vertices_xy_m": { "type": "array", "minItems": 3, "items": { "$ref": "#/$defs/point2" } },
         "area_m2": { "type": "number", "exclusiveMinimum": 0 },
         "side_lengths_m": { "type": "array", "minItems": 3, "items": { "type": "number", "exclusiveMinimum": 0 } },
+        "side_supporting_wall_candidate_ids": {
+          "type": "array",
+          "items": { "type": "array", "items": { "type": "string" } }
+        },
         "interior_angles_degrees": { "type": "array", "minItems": 3, "items": { "type": "number", "minimum": 0, "maximum": 180 } },
         "supporting_wall_candidate_ids": { "type": "array", "items": { "type": "string" } },
         "measurement_uncertainty": {
