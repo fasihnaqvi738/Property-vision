@@ -100,7 +100,8 @@ def analyze_wall_planes(
         along = patch @ tangent
         height = patch[:, v_axis]
         length_m = float(np.percentile(along, 98) - np.percentile(along, 2))
-        height_m = float(np.percentile(height, 98) - np.percentile(height, 2))
+        height_low, height_high = np.percentile(height, [2, 98])
+        height_m = float(height_high - height_low)
         horizontal_normal = normal[h_axes].astype(np.float64)
         horizontal_normal /= max(float(np.linalg.norm(horizontal_normal)), 1e-8)
         horizontal_tangent = np.array([-horizontal_normal[1], horizontal_normal[0]])
@@ -124,6 +125,9 @@ def analyze_wall_planes(
             "point_count": int(len(patch)),
             "observed_length_m": round(length_m, 3),
             "observed_height_m": round(height_m, 3),
+            "vertical_support_range_above_floor_m": [
+                round(float(height_low - floor), 3), round(float(height_high - floor), 3)
+            ],
             "observed_patch_area_m2": round(length_m * height_m, 3),
             "fit_inlier_fraction": round(len(patch) / max(1, len(cloud)), 4),
             "candidate_gaps": _find_candidate_gaps(patch, tangent, v_axis, floor),
@@ -145,6 +149,7 @@ def analyze_wall_planes(
         planes, aligned_candidate_ids, floor_outline
     )
     boundaries["line_intersection_hypotheses"] = intersection_cycles
+    opening_analysis = _analyze_opening_candidates(planes, boundaries)
     preview_path = Path(output_dir) / "wall_plane_candidates.png"
     _write_preview(cloud, planes, v_axis, h_axes, preview_path)
     boundary_preview_path = Path(output_dir) / "wall_boundary_diagnostic.png"
@@ -169,6 +174,7 @@ def analyze_wall_planes(
         "wall_plane_candidates": planes,
         "room_boundary_hypotheses": boundaries,
         "floor_coverage_alignment": boundary_alignment,
+        "opening_analysis": opening_analysis,
         "preview": preview_path.name,
         "boundary_preview": boundary_preview_path.name,
         "limitations": [
@@ -489,6 +495,101 @@ def _find_intersection_cycle_hypotheses(
             "Intersections can be caused by pose drift or false wall fits; a closed face does not prove a room boundary.",
             "Small openings, occluded wall runs, and disconnected or multi-room geometry are not resolved by this method.",
             "Candidate areas and thresholds are uncalibrated and require comparison with labeled geometry.",
+        ],
+    }
+
+
+def _analyze_opening_candidates(planes: list[dict], boundaries: dict) -> dict:
+    """Classify geometric voids as opening candidates without asserting semantics."""
+    plane_by_id = {str(plane.get("candidate_id")): plane for plane in planes}
+    surface_voids = []
+    for plane in planes:
+        for index, gap in enumerate(plane.get("candidate_gaps", []), start=1):
+            width = float(gap.get("width_extent_m", 0.0))
+            height = float(gap.get("height_extent_m", 0.0))
+            center_height = float(gap.get("center_height_above_provisional_floor_m", 0.0))
+            bottom = center_height - height / 2.0
+            if 0.50 <= width <= 1.80 and height >= 1.60 and bottom <= 0.25:
+                candidate_class = "possible_doorway"
+            elif 0.30 <= width <= 2.50 and 0.35 <= height <= 2.20 and bottom >= 0.45:
+                candidate_class = "possible_window_or_wall_void"
+            else:
+                candidate_class = "unclassified_wall_void"
+            surface_voids.append({
+                "candidate_id": f"{plane.get('candidate_id')}_void_{index}",
+                "wall_candidate_id": plane.get("candidate_id"),
+                "candidate_class": candidate_class,
+                "status": "unverified_geometry_candidate",
+                "width_extent_m": round(width, 3),
+                "height_extent_m": round(height, 3),
+                "bottom_above_provisional_floor_m": round(bottom, 3),
+                "center_along_wall_m": gap.get("center_along_wall_m"),
+                "occupied_grid_cells": gap.get("occupied_grid_cells"),
+                "measurement_uncertainty": {
+                    "status": "uncalibrated",
+                    "width_confidence_interval_m": None,
+                    "height_confidence_interval_m": None,
+                },
+            })
+
+    endpoint_reviews = []
+    for index, gap in enumerate(boundaries.get("nearby_unclosed_endpoint_gaps", []), start=1):
+        plane_a = plane_by_id.get(str(gap.get("candidate_a")))
+        plane_b = plane_by_id.get(str(gap.get("candidate_b")))
+        result = {
+            "candidate_id": f"boundary_gap_{index}",
+            "candidate_a": gap.get("candidate_a"),
+            "candidate_b": gap.get("candidate_b"),
+            "gap_extent_m": gap.get("gap_extent_m"),
+            "status": "unclassified_boundary_discontinuity",
+            "candidate_class": "unclassified_open_boundary_gap",
+        }
+        if plane_a and plane_b:
+            segment_a = np.asarray(plane_a.get("projected_endpoints_m", []), dtype=np.float64)
+            segment_b = np.asarray(plane_b.get("projected_endpoints_m", []), dtype=np.float64)
+            if segment_a.shape == (2, 2) and segment_b.shape == (2, 2):
+                tangent_a = segment_a[1] - segment_a[0]
+                tangent_b = segment_b[1] - segment_b[0]
+                tangent_a /= max(float(np.linalg.norm(tangent_a)), 1e-8)
+                tangent_b /= max(float(np.linalg.norm(tangent_b)), 1e-8)
+                angle = float(np.degrees(np.arccos(np.clip(abs(float(np.dot(tangent_a, tangent_b))), -1.0, 1.0))))
+                point_a = np.asarray(gap.get("endpoint_a_xy_m"), dtype=np.float64)
+                point_b = np.asarray(gap.get("endpoint_b_xy_m"), dtype=np.float64)
+                gap_vector = point_b - point_a
+                lateral_offset = abs(float(tangent_a[0] * gap_vector[1] - tangent_a[1] * gap_vector[0]))
+                result["direction_difference_degrees"] = round(angle, 2)
+                result["lateral_offset_m"] = round(lateral_offset, 3)
+                if angle <= 15.0 and lateral_offset <= 0.20 and 0.50 <= float(gap.get("gap_extent_m", 0.0)) <= 1.80:
+                    result["status"] = "possible_opening_or_unobserved_wall_segment"
+                    result["candidate_class"] = "possible_doorway_or_wall_gap"
+                else:
+                    result["review_reason"] = "Adjacent spans do not satisfy direction and shared-line checks for an opening interpretation."
+        endpoint_reviews.append(result)
+
+    possible_surface_openings = [
+        item for item in surface_voids
+        if item["candidate_class"] in {"possible_doorway", "possible_window_or_wall_void"}
+    ]
+    possible_boundary_openings = [
+        item for item in endpoint_reviews
+        if item["status"] == "possible_opening_or_unobserved_wall_segment"
+    ]
+    return {
+        "status": "diagnostic_only",
+        "candidate_count": len(possible_surface_openings) + len(possible_boundary_openings),
+        "surface_void_candidates": surface_voids,
+        "boundary_gap_reviews": endpoint_reviews,
+        "opening_candidates": possible_surface_openings + possible_boundary_openings,
+        "classification_policy": {
+            "doorway_hint": "0.50-1.80 m width, >=1.60 m vertical void, bottom <=0.25 m above provisional floor",
+            "window_hint": "0.30-2.50 m width, 0.35-2.20 m height, bottom >=0.45 m above provisional floor",
+            "boundary_gap_hint": "0.50-1.80 m gap between near-collinear wall spans with <=0.20 m lateral offset",
+            "semantic_status": "All labels are unverified candidates; no door or window is asserted.",
+        },
+        "limitations": [
+            "Missing returns can be caused by occlusion, sparse sampling, pose error, or incomplete wall support.",
+            "A gap between wall-span endpoints is not sufficient evidence of an opening unless the spans are collinear and vertical coverage supports it.",
+            "Candidate extents and classification thresholds are uncalibrated and have no validated confidence intervals.",
         ],
     }
 
