@@ -32,6 +32,7 @@ def build_result(
     point_cloud: str | None,
     limitations: list[str],
     raw_capture: list[str] | None = None,
+    debug_views: list[str] | None = None,
 ) -> dict:
     """Build the honest shared envelope; unsupported product outputs stay explicit."""
     return {
@@ -79,6 +80,7 @@ def build_result(
             "rendered_plan": None,
             "point_cloud": point_cloud,
             "raw_capture": raw_capture or [],
+            "debug_views": debug_views or [],
         },
         "limitations": limitations,
     }

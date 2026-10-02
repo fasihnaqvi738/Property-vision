@@ -31,6 +31,11 @@ def run_pipeline(input_path: str, output_root: str = "outputs") -> Path:
             point_cloud=str(run_dir / "rgbd_point_cloud.ply"),
             limitations=summary["limitations"],
             raw_capture=[str(capture.path.resolve())],
+            debug_views=(
+                [str(run_dir / summary["floor_return_analysis"]["preview"])]
+                if summary["floor_return_analysis"]["status"] == "diagnostic_only"
+                else []
+            ),
         )
         result_path = run_dir / "result.json"
         result_path.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")

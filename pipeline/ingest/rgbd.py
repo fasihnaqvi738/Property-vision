@@ -6,6 +6,7 @@ from pathlib import Path
 
 import numpy as np
 import cv2
+from pipeline.geometry.floor_returns import analyze_floor_returns
 
 
 def _read_odometry(path: Path) -> list[dict[str, str]]:
@@ -151,6 +152,7 @@ def reconstruct_rgbd(capture_path: Path, output_dir: Path) -> dict:
     )
     points_chunks = []
     color_chunks = []
+    pose_translations = []
     confidence_histogram: dict[str, int] = {}
     processed = 0
 
@@ -183,6 +185,7 @@ def reconstruct_rgbd(capture_path: Path, output_dir: Path) -> dict:
         ))
         rotation = _quaternion_matrix(*(float(row[k]) for k in ("qx", "qy", "qz", "qw")))
         translation = np.array([float(row[k]) for k in ("x", "y", "z")])
+        pose_translations.append(translation)
         points_chunks.append(camera_points @ rotation.T + translation)
         frame_colors = rgb_frames[frame_id][::pixel_stride, ::pixel_stride]
         color_chunks.append(frame_colors[valid])
@@ -202,6 +205,18 @@ def reconstruct_rgbd(capture_path: Path, output_dir: Path) -> dict:
         raise ValueError("The matched depth frames contain no positive depth samples.")
     points = np.concatenate(points_chunks, axis=0).astype(np.float32)
     colors = np.concatenate(color_chunks, axis=0).astype(np.uint8)
+    try:
+        floor_analysis = analyze_floor_returns(
+            points,
+            np.asarray(pose_translations, dtype=np.float32),
+            output_dir,
+        )
+    except (ValueError, IOError, cv2.error) as error:
+        floor_analysis = {
+            "status": "unavailable",
+            "error": str(error),
+            "limitations": ["A provisional floor-return preview could not be produced for this capture."],
+        }
     ply_path = output_dir / "rgbd_point_cloud.ply"
     _write_ascii_ply(ply_path, points, colors)
 
@@ -224,6 +239,7 @@ def reconstruct_rgbd(capture_path: Path, output_dir: Path) -> dict:
         "camera_intrinsics": "Per-frame RGB-camera intrinsics scaled from 1920x1440 to the depth raster dimensions.",
         "pose_convention_assumption": "CSV quaternion (qx,qy,qz,qw) and translation interpreted as camera-to-world, using standard right-handed quaternion rotation.",
         "confidence_value_pixel_counts": confidence_histogram,
+        "floor_return_analysis": floor_analysis,
         "artifacts": {"point_cloud": ply_path.name},
         "limitations": [
             "Depth units and pose convention are assumptions and need validation against dataset documentation or a known dimension.",

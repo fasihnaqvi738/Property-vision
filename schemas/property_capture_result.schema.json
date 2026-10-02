@@ -154,7 +154,8 @@
       "properties": {
         "rendered_plan": { "type": ["string", "null"] },
         "point_cloud": { "type": ["string", "null"] },
-        "raw_capture": { "type": "array", "items": { "type": "string" } }
+        "raw_capture": { "type": "array", "items": { "type": "string" } },
+        "debug_views": { "type": "array", "items": { "type": "string" } }
       }
     },
     "limitations": { "type": "array", "items": { "type": "string" } }
