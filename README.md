@@ -41,6 +41,8 @@ python main.py "captures\walkthrough.mp4"
 
 The prototype samples approximately four frames per second (up to 160 frames), saves the selected frames and a contact sheet, then sends those frames through COLMAP sparse reconstruction with sequential matching. The result uses the shared JSON envelope with `capture.tier` set to `video`. This is a sparse monocular reconstruction with arbitrary scale; it does not yet produce dimensioned rooms, classified openings, drift correction, or calibrated uncertainty.
 
+Video results report `video_reconstruction_quality` in the result summary: sampled-frame count, model count, largest-model coverage, and per-model registration memberships. Multiple models trigger a limitation warning because the selected primary point cloud may cover only part of the walkthrough.
+
 Each run creates a timestamped folder under `outputs` (or the selected output directory) containing:
 
 - `result.json`: input file list, COLMAP summary, model counts, output paths, and scale limitations.

@@ -43,6 +43,27 @@ def _serialize_boundary_hypotheses(hypotheses: list[dict]) -> list[dict]:
     return serialized
 
 
+def _video_reconstruction_quality(sampling: dict, models: list[dict]) -> dict:
+    """Summarize frame coverage and disconnected sparse models without claiming accuracy."""
+    sampled = int(sampling.get("sampled_frame_count", 0))
+    largest_model = max(models, key=lambda model: model.get("registered_images", 0), default=None)
+    registered_memberships = sum(int(model.get("registered_images", 0)) for model in models)
+    return {
+        "status": "fragmented" if len(models) > 1 else "single_model" if models else "no_model",
+        "sampled_frame_count": sampled,
+        "model_count": len(models),
+        "largest_model_id": largest_model.get("model_id") if largest_model else None,
+        "largest_model_registered_frames": int(largest_model.get("registered_images", 0)) if largest_model else 0,
+        "largest_model_coverage_percent": (
+            round(largest_model["registered_images"] / sampled * 100, 1)
+            if largest_model and sampled else None
+        ),
+        "registered_frame_memberships_across_models": registered_memberships,
+        "membership_count_may_include_the_same_frame_in_multiple_models": True,
+        "total_sparse_points_across_models": sum(int(model.get("sparse_points", 0)) for model in models),
+    }
+
+
 def run_pipeline(input_path: str, output_root: str = "outputs", *, pose_mode: str = "auto") -> Path:
     started_at = perf_counter()
     capture = load_capture(input_path)
@@ -154,12 +175,19 @@ def run_pipeline(input_path: str, output_root: str = "outputs", *, pose_mode: st
             key=lambda model: (model["registered_images"], model["sparse_points"]),
             default=None,
         )
+        video_quality = _video_reconstruction_quality(sampling, models)
         limitations = [
             "Walkthrough frames are sampled from video and reconstructed as a sparse monocular image set.",
             "The reconstruction has arbitrary scale and does not yield verified room dimensions or openings.",
             "Video motion, rolling shutter, exposure changes, and repeated viewpoints can reduce image matching quality.",
             "Sampling and bundle adjustment do not implement a validated drift correction or loop-closure ablation.",
         ]
+        if video_quality["status"] == "fragmented":
+            limitations.append(
+                f"COLMAP produced {video_quality['model_count']} disconnected models; the largest contains "
+                f"{video_quality['largest_model_coverage_percent']}% of sampled frames, so the primary point cloud "
+                "is not a continuous reconstruction of the full walkthrough."
+            )
         result = build_result(
             capture_id=capture.path.stem,
             tier="video",
@@ -174,6 +202,7 @@ def run_pipeline(input_path: str, output_root: str = "outputs", *, pose_mode: st
                 "primary_model_id": primary_model["model_id"] if primary_model else None,
                 "scale": "arbitrary",
                 "reconstruction_settings": reconstruction_settings,
+                "video_reconstruction_quality": video_quality,
             },
             point_cloud=primary_model["point_cloud_ply"] if primary_model else None,
             limitations=limitations,
