@@ -136,6 +136,8 @@ def analyze_wall_planes(
     boundaries = _find_closed_boundary_hypotheses(planes)
     preview_path = Path(output_dir) / "wall_plane_candidates.png"
     _write_preview(cloud, planes, v_axis, h_axes, preview_path)
+    boundary_preview_path = Path(output_dir) / "wall_boundary_diagnostic.png"
+    _write_boundary_preview(planes, boundaries, boundary_preview_path)
     return {
         "status": "diagnostic_only",
         "vertical_axis": vertical_axis,
@@ -156,6 +158,7 @@ def analyze_wall_planes(
         "wall_plane_candidates": planes,
         "room_boundary_hypotheses": boundaries,
         "preview": preview_path.name,
+        "boundary_preview": boundary_preview_path.name,
         "limitations": [
             "Plane lengths, heights, and patch areas describe sampled planar support, not verified room dimensions or complete surface areas.",
             "Candidate extent values are uncalibrated diagnostics and do not have validated confidence intervals.",
@@ -164,6 +167,73 @@ def analyze_wall_planes(
             "Closed endpoint cycles are boundary hypotheses only; they are not semantic room segmentation, adjacency, opening dimensions, or an accepted rendered floor plan.",
         ],
     }
+
+
+def _write_boundary_preview(planes: list[dict], boundaries: dict, path: Path) -> None:
+    """Render a top-down diagnostic of candidate spans and unresolved endpoint gaps."""
+    canvas = np.full((900, 1200, 3), 250, dtype=np.uint8)
+    segments = [
+        np.asarray(plane["projected_endpoints_m"], dtype=np.float64)
+        for plane in planes
+        if len(plane.get("projected_endpoints_m", [])) == 2
+    ]
+    if not segments:
+        cv2.putText(canvas, "No wall-plane candidates", (50, 80), cv2.FONT_HERSHEY_SIMPLEX,
+                    0.9, (30, 30, 30), 2, cv2.LINE_AA)
+        cv2.imwrite(str(path), canvas)
+        return
+
+    endpoints = np.concatenate(segments, axis=0)
+    low = endpoints.min(axis=0)
+    high = endpoints.max(axis=0)
+    span = np.maximum(high - low, 0.5)
+    padding = np.maximum(span * 0.08, 0.25)
+    low -= padding
+    high += padding
+    usable_w, usable_h = 1060, 740
+    scale = min(usable_w / max(high[0] - low[0], 1e-6),
+                usable_h / max(high[1] - low[1], 1e-6))
+    origin = np.array([70.0, 820.0])
+
+    def pixel(point: np.ndarray) -> tuple[int, int]:
+        relative = (np.asarray(point, dtype=np.float64) - low) * scale
+        return int(origin[0] + relative[0]), int(origin[1] - relative[1])
+
+    cv2.putText(canvas, "Wall boundary candidates (diagnostic only)", (40, 38),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.85, (35, 35, 35), 2, cv2.LINE_AA)
+    for index, plane in enumerate(planes):
+        points = plane.get("projected_endpoints_m", [])
+        if len(points) != 2:
+            continue
+        a, b = pixel(np.asarray(points[0])), pixel(np.asarray(points[1]))
+        cv2.line(canvas, a, b, (180, 110, 20), 3, cv2.LINE_AA)
+        cv2.circle(canvas, a, 6, (20, 130, 230), -1, cv2.LINE_AA)
+        cv2.circle(canvas, b, 6, (20, 130, 230), -1, cv2.LINE_AA)
+        label = plane.get("candidate_id", f"candidate_{index + 1}")
+        midpoint = ((a[0] + b[0]) // 2, (a[1] + b[1]) // 2)
+        cv2.putText(canvas, label, (midpoint[0] + 6, midpoint[1] - 6),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (30, 30, 30), 1, cv2.LINE_AA)
+
+    for gap in boundaries.get("nearby_unclosed_endpoint_gaps", []):
+        a = pixel(np.asarray(gap["endpoint_a_xy_m"]))
+        b = pixel(np.asarray(gap["endpoint_b_xy_m"]))
+        distance = float(gap.get("gap_extent_m", 0.0))
+        direction = np.asarray(b, dtype=np.float64) - np.asarray(a, dtype=np.float64)
+        length = float(np.linalg.norm(direction))
+        if length > 0:
+            direction /= length
+            for start in np.arange(0.0, length, 14.0):
+                end = min(start + 7.0, length)
+                p0 = tuple(np.round(np.asarray(a) + direction * start).astype(int))
+                p1 = tuple(np.round(np.asarray(a) + direction * end).astype(int))
+                cv2.line(canvas, p0, p1, (40, 40, 220), 2, cv2.LINE_AA)
+        mid = ((a[0] + b[0]) // 2, (a[1] + b[1]) // 2)
+        cv2.putText(canvas, f"unclosed {distance:.2f} m", (mid[0] + 5, mid[1] - 7),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (40, 40, 220), 1, cv2.LINE_AA)
+
+    cv2.putText(canvas, "Orange: observed endpoints   Blue: fitted wall spans   Red: unresolved gaps",
+                (40, 865), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (50, 50, 50), 1, cv2.LINE_AA)
+    cv2.imwrite(str(path), canvas)
 
 
 def _deduplicate_overlapping_planes(planes: list[dict]) -> list[dict]:

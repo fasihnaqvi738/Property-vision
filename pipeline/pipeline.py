@@ -35,7 +35,11 @@ def run_pipeline(input_path: str, output_root: str = "outputs") -> Path:
                 str(run_dir / summary[key]["preview"])
                 for key in ("floor_return_analysis", "wall_plane_analysis")
                 if summary.get(key, {}).get("status") == "diagnostic_only"
-            ],
+            ] + (
+                [str(run_dir / summary["wall_plane_analysis"]["boundary_preview"])]
+                if summary.get("wall_plane_analysis", {}).get("boundary_preview")
+                else []
+            ),
         )
         result_path = run_dir / "result.json"
         result_path.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
