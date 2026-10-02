@@ -1,7 +1,6 @@
 """Reader and lightweight point-cloud exporter for the supplied RGB-D bundle."""
 
 import csv
-import json
 import math
 from pathlib import Path
 
@@ -232,6 +231,4 @@ def reconstruct_rgbd(capture_path: Path, output_dir: Path) -> dict:
             "This is a sampled point cloud, not a floor plan or a survey-grade metric model.",
         ],
     }
-    manifest_path = output_dir / "result.json"
-    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     return manifest
