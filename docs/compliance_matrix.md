@@ -11,10 +11,10 @@ Status reflects the repository and artifacts available on 2026-10-02. “In prog
 | Device and tier accuracy matrix | None | Not started | State supported iPhones and honest expected error by tier, backed by benchmark results. |
 | Photo tier: 2–8 stills per room, per-room folders, stitched whole-property plan | `pipeline/reconstruction/colmap.py`, `pipeline/pipeline.py` | Prototype only | COLMAP produces sparse arbitrary-scale geometry; no room dimensions, multi-room stitching, or intervals. |
 | Video tier: handheld walkthrough input | None; `CaptureType.VIDEO` is detected only | Not started | Implement video decoding, trajectory/depth or visual reconstruction, and the same plan output. |
-| LiDAR tier: depth, poses, intrinsics | `pipeline/ingest/rgbd.py`, `pipeline/geometry/floor_returns.py` | Prototype only | Supplied RGB-D bundle produces a colored point cloud and provisional floor-return coverage preview; depth units, gravity axis, camera registration, and pose scale need ground-truth validation. |
+| LiDAR tier: depth, poses, intrinsics | `pipeline/ingest/rgbd.py`, `pipeline/geometry/floor_returns.py`, `pipeline/geometry/wall_planes.py` | Prototype only | Supplied RGB-D bundle produces a colored point cloud, provisional floor-return preview, and diagnostic vertical-plane/missing-return candidates; depth units, gravity axis, camera registration, and pose scale need ground-truth validation. Candidates are not accepted room walls/openings. |
 | One command per capture on a clean machine in under 15 minutes | `main.py`, `README.md` | Partial | Photo and supplied RGB-D commands exist; fresh-machine install and timing are unverified; video is unsupported. |
 | Shared JSON result contract across all tiers | `schemas/property_capture_result.schema.json`, `pipeline/results.py` | Partial | Photo and RGB-D emit the same envelope with unavailable outputs explicit; add video emitter and validate generated results against the schema. |
-| Dimensioned per-room plan: walls, ceiling height, floor area, openings | None | Not started | Detect and dimension room boundaries/openings with calibrated intervals. |
+| Dimensioned per-room plan: walls, ceiling height, floor area, openings | `pipeline/geometry/wall_planes.py` | Prototype started | Extracts provisional planar patches and unclassified gaps from RGB-D only; still needs room segmentation, opening classification, measurements tied to complete room surfaces, confidence intervals, and ground-truth validation. |
 | Stitched whole-property plan and correct room adjacency | None | Not started | Place all rooms, detect connectors/adjacency, and prevent room overlaps. |
 | Rendered plan | None | Not started | Produce a readable plan image/PDF from the same geometry as the JSON. |
 | Per-surface damage regions, class, and metric extent | None | Not started | Build labeled staged-damage benchmark data and detect/measure regions. |
@@ -37,7 +37,7 @@ Status reflects the repository and artifacts available on 2026-10-02. “In prog
 ## Next engineering sequence
 
 1. Validate photo and RGB-D results against the shared schema; add video output to the same contract.
-2. Extend the floor-return diagnostic into wall-plane/room segmentation, openings, dimensioned room geometry, and a rendered plan; add drift correction and a measurable ablation.
+2. Extend diagnostic wall planes into room segmentation, classified openings, dimensioned room geometry, and a rendered plan; add drift correction and a measurable ablation.
 3. Establish a named capture route and acquire the three-tier, multi-room benchmark with ground truth and repeats.
 4. Implement video and photo whole-property reconstruction against the same result contract.
 5. Add damage/scope outputs, calibration, incumbent comparison, and the before/after fix-loop bundle.

@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 import cv2
 from pipeline.geometry.floor_returns import analyze_floor_returns
+from pipeline.geometry.wall_planes import analyze_wall_planes
 
 
 def _read_odometry(path: Path) -> list[dict[str, str]]:
@@ -217,6 +218,25 @@ def reconstruct_rgbd(capture_path: Path, output_dir: Path) -> dict:
             "error": str(error),
             "limitations": ["A provisional floor-return preview could not be produced for this capture."],
         }
+    if floor_analysis["status"] == "diagnostic_only":
+        try:
+            wall_analysis = analyze_wall_planes(
+                points,
+                output_dir,
+                vertical_axis=floor_analysis["vertical_axis"],
+                provisional_floor_level_m=floor_analysis["provisional_floor_level_m"],
+            )
+        except (ValueError, IOError, cv2.error, np.linalg.LinAlgError) as error:
+            wall_analysis = {
+                "status": "unavailable",
+                "error": str(error),
+                "limitations": ["Vertical wall-plane candidates could not be produced for this capture."],
+            }
+    else:
+        wall_analysis = {
+            "status": "unavailable",
+            "limitations": ["Wall-plane analysis requires a provisional floor estimate."],
+        }
     ply_path = output_dir / "rgbd_point_cloud.ply"
     _write_ascii_ply(ply_path, points, colors)
 
@@ -240,11 +260,15 @@ def reconstruct_rgbd(capture_path: Path, output_dir: Path) -> dict:
         "pose_convention_assumption": "CSV quaternion (qx,qy,qz,qw) and translation interpreted as camera-to-world, using standard right-handed quaternion rotation.",
         "confidence_value_pixel_counts": confidence_histogram,
         "floor_return_analysis": floor_analysis,
+        "wall_plane_analysis": wall_analysis,
         "artifacts": {"point_cloud": ply_path.name},
         "limitations": [
             "Depth units and pose convention are assumptions and need validation against dataset documentation or a known dimension.",
             "RGB/depth pixel registration and the shared stream start time are inferred from matching aspect ratios, intrinsics, and nearly equal stream durations; they have not been independently ground-truthed.",
             "This is a sampled point cloud, not a floor plan or a survey-grade metric model.",
+            "Vertical plane patches and missing-return gaps are diagnostic candidates only; they are not verified walls, doors, windows, or room dimensions.",
+            "Diagnostic plane extents are uncalibrated and have no validated confidence intervals.",
+            "The wall pass assumes the provisional floor axis points upward and has not been calibrated against gravity or ground truth.",
         ],
     }
     return manifest
