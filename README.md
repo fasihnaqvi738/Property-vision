@@ -1,6 +1,6 @@
 # Property Vision
 
-An early computer-vision prototype for reconstructing a sparse 3D scene from room photos or RGB-D captures.
+An early computer-vision prototype for reconstructing a sparse 3D scene from room photos, walkthrough videos, or RGB-D captures.
 
 ## Current photo workflow
 
@@ -29,14 +29,25 @@ Pass any other room-photo folder as the first argument. To store results elsewhe
 python main.py "C:\captures\living-room" --output-dir "C:\results"
 ```
 
+## Walkthrough video workflow
+
+Pass a single video file directly, or a folder containing exactly one video:
+
+```powershell
+python main.py "captures\walkthrough.mp4"
+```
+
+The prototype samples approximately four frames per second (up to 160 frames), saves the selected frames and a contact sheet, then sends those frames through COLMAP sparse reconstruction with sequential matching. The result uses the shared JSON envelope with `capture.tier` set to `video`. This is a sparse monocular reconstruction with arbitrary scale; it does not yet produce dimensioned rooms, classified openings, drift correction, or calibrated uncertainty.
+
 Each run creates a timestamped folder under `outputs` (or the selected output directory) containing:
 
 - `result.json`: input file list, COLMAP summary, model counts, output paths, and scale limitations.
 - `reconstruction\models\<id>\`: portable COLMAP text model (`cameras.txt`, `images.txt`, and `points3D.txt`).
 - `reconstruction\models\<id>\points.ply`: sparse point cloud, viewable in CloudCompare, MeshLab, or another PLY viewer.
 - `reconstruction\database.db`: COLMAP feature and match database used for the run.
+- For video runs: sampled `video_frames\`, `video_sample_contact_sheet.png`, and `video_sampling.json`.
 
-The model has arbitrary scale. It is not yet a dimensioned room plan and does not report walls, openings, room area, damage, or confidence intervals. Video-only, standalone point-cloud, and HEIC ingestion are not implemented. Each run writes to a new folder, so previous results are retained.
+Photo and video models have arbitrary scale. These workflows do not yet produce a dimensioned room plan or report walls, openings, room area, damage, or confidence intervals. Standalone point-cloud and HEIC ingestion are not implemented. Each run writes to a new folder, so previous results are retained.
 
 ## RGB-D capture workflow
 
@@ -48,7 +59,14 @@ python main.py "captures\c00a170fe1"
 
 This creates a colored `rgbd_point_cloud.ply`, `floor_return_preview.png`, `wall_plane_candidates.png`, and `wall_boundary_diagnostic.png`, and writes `result.json` in a timestamped output folder. The export samples every tenth depth frame and every fourth pixel. It matches RGB presentation timestamps to the depth odometry timestamps, and records the time offsets and alignment assumptions in the manifest. The floor preview outlines the largest connected area of observed floor returns and records its polygon and observed-cell area. The wall pass suppresses overlapping near-coplanar detections, compares candidate spans with nearby floor-outline support, and reports snapped endpoint cycles, line-intersection face hypotheses, provisional edge lengths, interior angles, and nearby unclosed endpoint gaps. It also screens internal wall voids and boundary gaps for possible openings, while leaving every finding unverified. The geometry review checks whether each face is simple, supported, and room-shaped under provisional thresholds. These are still diagnostics, not room labels, identified doors/windows, or calibrated room measurements: observed floor coverage is not the room footprint, an aligned candidate is not a verified wall, and a closed face is not proof of a room. Provisional edge lengths and areas have no calibrated confidence intervals. The pipeline treats depth values as millimeters, odometry poses as camera-to-world transforms, and the least-varying camera-motion axis as vertical; all need validation against capture documentation and ground truth. It does not yet create an accepted floor plan or calibrated room measurements.
 
-Photo and RGB-D runs share the versioned output envelope defined in `schemas/property_capture_result.schema.json`. Until room extraction and calibration are implemented, unsupported plan and measurement fields are explicitly marked unavailable. The requirement-by-requirement status is tracked in `docs/compliance_matrix.md`.
+Photo, video, and RGB-D runs share the versioned output envelope defined in `schemas/property_capture_result.schema.json`. Every newly generated `result.json` is checked against that schema before it is written. Existing output folders can be checked in bulk:
+
+```powershell
+python -m pipeline.validation outputs
+python -m pipeline.validation outputs\some_run\result.json
+```
+
+Until room extraction and calibration are implemented, unsupported plan and measurement fields are explicitly marked unavailable. The requirement-by-requirement status is tracked in `docs/compliance_matrix.md`.
 
 ## Ground-truth benchmark scoring
 
