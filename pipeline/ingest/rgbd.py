@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 import cv2
 from pipeline.geometry.floor_returns import analyze_floor_returns
+from pipeline.geometry.render_review import render_geometry_review_svg
 from pipeline.geometry.wall_planes import analyze_wall_planes
 
 
@@ -454,6 +455,9 @@ def reconstruct_rgbd(capture_path: Path, output_dir: Path) -> dict:
     geometry_review_path = _write_geometry_review_geojson(
         output_dir / "geometry_review.geojson", floor_analysis, wall_analysis
     )
+    geometry_review_svg_path = render_geometry_review_svg(
+        geometry_review_path, output_dir / "geometry_review.svg"
+    )
 
     manifest = {
         "format_version": 1,
@@ -486,6 +490,7 @@ def reconstruct_rgbd(capture_path: Path, output_dir: Path) -> dict:
         "wall_plane_analysis": wall_analysis,
         "artifacts": {"point_cloud": ply_path.name},
         "geometry_review_geojson": geometry_review_path.name,
+        "geometry_review_svg": geometry_review_svg_path.name,
         "limitations": [
             (
                 "Polycam depth units, ARKit pose convention, and axis conversion follow the published raw-data specification but still need validation against independent ground truth."
