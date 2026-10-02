@@ -19,10 +19,11 @@ The benchmark needs measured truth and saved pipeline outputs. Do not guess valu
 - `staged_damage_examples`: at least two photographed and measured examples from distinct classes, e.g. `{ "example_id": "D01", "room_id": "R01", "surface_id": "R01_W02", "damage_class": "<case-study class>", "extent_m2": 0.12, "photo_paths": ["damage/D01.jpg"] }`.
 - `runs`: add an entry per capture with `result_json`, `tier`, and `room_id`. Result paths may be relative to the manifest. Add `repeat_group` for repeat captures.
 - `wall_matches`: map measured wall IDs to predicted `surface_id` values, for example `{ "ground_truth_wall_id": "R01_W01", "prediction_surface_id": "wall_1" }`.
+- `boundary_hypothesis_matches`: optionally map a reviewed diagnostic face to a measured room, e.g. `{ "ground_truth_room_id": "R01", "prediction_candidate_id": "intersection_cycle_1" }`. The report shows area error in a separate diagnostics section; it never treats that face as an accepted room or applies an unverified pass threshold.
 - `opening_matches`: map measured opening IDs to predicted `opening_id` values. Use a null `prediction_opening_id` for a missed opening. List every extra predicted opening in `phantom_opening_prediction_ids`.
 - For photo whole-property scoring, fill `room_matches` to map truth room IDs to predicted room IDs.
 
-The current reconstruction does not emit accepted dimensioned rooms or classified openings, so many scores will be unavailable/fail until those capabilities exist. That is useful evidence; do not manually edit a result to make a gate pass. The evaluator currently scores dimensions and repeated-run consistency; the staged-damage evidence must be retained for the damage workflow, which is not implemented yet.
+The current reconstruction does not emit accepted dimensioned rooms or classified openings, so many scores will be unavailable/fail until those capabilities exist. A mapped boundary hypothesis can still be compared with tape-measured room area as a diagnostic. That does not establish an accepted room or an accuracy pass. Do not manually edit a result to make a gate pass. The evaluator scores dimensions and repeated-run consistency; staged-damage evidence must be retained for the damage workflow, which is not implemented yet.
 
 ## Run scoring
 
