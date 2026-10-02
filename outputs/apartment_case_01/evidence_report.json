@@ -1,0 +1,319 @@
+{
+  "case_id": "apartment_case_01",
+  "status": "partial_evidence_only",
+  "reference_plan": {
+    "source": "C:\\Property Vision\\property-vision\\captures\\apartment_case_01\\reference_plan.json",
+    "primary_rooms": 8,
+    "ancillary_spaces": 5,
+    "connectors": 2,
+    "adjacency_edges": 14,
+    "plan_dimensions_transcribed": 12,
+    "independent_metric_truth": false,
+    "overlap_validation": "No polygon intersections above four raster pixels in the traced source-image coordinate frame.",
+    "opening_widths_available": 0
+  },
+  "photo_run": {
+    "result": "C:\\Property Vision\\property-vision\\outputs\\photo_tier_20261002T185859841795Z\\result.json",
+    "total_room_groups": 8,
+    "groups_with_models": 2,
+    "registered_photo_total": 7,
+    "room_results": [
+      {
+        "room_id": "C01_lobby",
+        "status": "failed",
+        "input_photos": 2,
+        "registered_photos": 0,
+        "model_count": 0,
+        "failure_reason": "COLMAP could not reconstruct this photo set. Use overlapping, sharp photos with visible textured surfaces, then try again."
+      },
+      {
+        "room_id": "R01_master_bedroom",
+        "status": "failed",
+        "input_photos": 3,
+        "registered_photos": 0,
+        "model_count": 0,
+        "failure_reason": "COLMAP could not reconstruct this photo set. Use overlapping, sharp photos with visible textured surfaces, then try again."
+      },
+      {
+        "room_id": "R02_second_bedroom",
+        "status": "failed",
+        "input_photos": 2,
+        "registered_photos": 0,
+        "model_count": 0,
+        "failure_reason": "COLMAP could not reconstruct this photo set. Use overlapping, sharp photos with visible textured surfaces, then try again."
+      },
+      {
+        "room_id": "R03_third_bedroom",
+        "status": "complete",
+        "input_photos": 3,
+        "registered_photos": 3,
+        "model_count": 1,
+        "failure_reason": null
+      },
+      {
+        "room_id": "R04_fourth_bedroom",
+        "status": "failed",
+        "input_photos": 2,
+        "registered_photos": 0,
+        "model_count": 0,
+        "failure_reason": "COLMAP could not reconstruct this photo set. Use overlapping, sharp photos with visible textured surfaces, then try again."
+      },
+      {
+        "room_id": "R05_family_lounge",
+        "status": "failed",
+        "input_photos": 3,
+        "registered_photos": 0,
+        "model_count": 0,
+        "failure_reason": "COLMAP could not reconstruct this photo set. Use overlapping, sharp photos with visible textured surfaces, then try again."
+      },
+      {
+        "room_id": "R06_living_dining",
+        "status": "complete",
+        "input_photos": 4,
+        "registered_photos": 4,
+        "model_count": 1,
+        "failure_reason": null
+      },
+      {
+        "room_id": "R07_kitchen",
+        "status": "failed",
+        "input_photos": 4,
+        "registered_photos": 0,
+        "model_count": 0,
+        "failure_reason": "COLMAP could not reconstruct this photo set. Use overlapping, sharp photos with visible textured surfaces, then try again."
+      }
+    ],
+    "joint_reconstruction": {
+      "status": "diagnostic_only",
+      "input_photo_count": 23,
+      "registered_image_count": 3,
+      "largest_model_photo_coverage_percent": 13.0,
+      "largest_model_room_ids": [
+        "C01_lobby",
+        "R06_living_dining"
+      ],
+      "is_metric_or_room_segmented": false
+    },
+    "runtime_seconds": 45.868
+  },
+  "video_run": {
+    "result": "C:\\Property Vision\\property-vision\\outputs\\video_room_segments_input_20261002T202712410589Z\\result.json",
+    "input_room_intervals": 11,
+    "intervals_with_models": 7,
+    "intervals_with_at_least_3_registered_frames": 4,
+    "room_results": [
+      {
+        "room_id": "B01_master_bathroom",
+        "interval_s": [
+          103.7,
+          108.0
+        ],
+        "match_confidence": "high",
+        "sampled_frames": 7,
+        "unique_registered_frames": 2,
+        "registered_frame_memberships": 2,
+        "largest_model_registered_frames": 2,
+        "largest_model_coverage_percent": 28.6,
+        "model_count": 1,
+        "sparse_points": 1094,
+        "has_sparse_model_with_3_or_more_frames": false,
+        "failure_reason": null
+      },
+      {
+        "room_id": "B02_guest_bathroom",
+        "interval_s": [
+          141.4,
+          149.5
+        ],
+        "match_confidence": "high",
+        "sampled_frames": 13,
+        "unique_registered_frames": 0,
+        "registered_frame_memberships": 0,
+        "largest_model_registered_frames": 0,
+        "largest_model_coverage_percent": 0.0,
+        "model_count": 0,
+        "sparse_points": 0,
+        "has_sparse_model_with_3_or_more_frames": false,
+        "failure_reason": "COLMAP could not reconstruct this photo set. Use overlapping, sharp photos with visible textured surfaces, then try again."
+      },
+      {
+        "room_id": "B03_fourth_bedroom_bathroom",
+        "interval_s": [
+          164.3,
+          169.6
+        ],
+        "match_confidence": "high",
+        "sampled_frames": 8,
+        "unique_registered_frames": 0,
+        "registered_frame_memberships": 0,
+        "largest_model_registered_frames": 0,
+        "largest_model_coverage_percent": 0.0,
+        "model_count": 0,
+        "sparse_points": 0,
+        "has_sparse_model_with_3_or_more_frames": false,
+        "failure_reason": "COLMAP could not reconstruct this photo set. Use overlapping, sharp photos with visible textured surfaces, then try again."
+      },
+      {
+        "room_id": "C01_lobby",
+        "interval_s": [
+          58.0,
+          75.4
+        ],
+        "match_confidence": "high",
+        "sampled_frames": 27,
+        "unique_registered_frames": 24,
+        "registered_frame_memberships": 35,
+        "largest_model_registered_frames": 18,
+        "largest_model_coverage_percent": 66.7,
+        "model_count": 2,
+        "sparse_points": 413,
+        "has_sparse_model_with_3_or_more_frames": true,
+        "failure_reason": null
+      },
+      {
+        "room_id": "R01_master_bedroom",
+        "interval_s": [
+          109.1,
+          113.1
+        ],
+        "match_confidence": "medium",
+        "sampled_frames": 6,
+        "unique_registered_frames": 5,
+        "registered_frame_memberships": 5,
+        "largest_model_registered_frames": 3,
+        "largest_model_coverage_percent": 50.0,
+        "model_count": 2,
+        "sparse_points": 1335,
+        "has_sparse_model_with_3_or_more_frames": true,
+        "failure_reason": null
+      },
+      {
+        "room_id": "R03_third_bedroom",
+        "interval_s": [
+          134.6,
+          140.0
+        ],
+        "match_confidence": "high",
+        "sampled_frames": 9,
+        "unique_registered_frames": 0,
+        "registered_frame_memberships": 0,
+        "largest_model_registered_frames": 0,
+        "largest_model_coverage_percent": 0.0,
+        "model_count": 0,
+        "sparse_points": 0,
+        "has_sparse_model_with_3_or_more_frames": false,
+        "failure_reason": "COLMAP could not reconstruct this photo set. Use overlapping, sharp photos with visible textured surfaces, then try again."
+      },
+      {
+        "room_id": "R04_fourth_bedroom",
+        "interval_s": [
+          150.8,
+          161.6
+        ],
+        "match_confidence": "high",
+        "sampled_frames": 17,
+        "unique_registered_frames": 0,
+        "registered_frame_memberships": 0,
+        "largest_model_registered_frames": 0,
+        "largest_model_coverage_percent": 0.0,
+        "model_count": 0,
+        "sparse_points": 0,
+        "has_sparse_model_with_3_or_more_frames": false,
+        "failure_reason": "COLMAP could not reconstruct this photo set. Use overlapping, sharp photos with visible textured surfaces, then try again."
+      },
+      {
+        "room_id": "R05_family_lounge",
+        "interval_s": [
+          78.1,
+          88.9
+        ],
+        "match_confidence": "high",
+        "sampled_frames": 17,
+        "unique_registered_frames": 17,
+        "registered_frame_memberships": 19,
+        "largest_model_registered_frames": 17,
+        "largest_model_coverage_percent": 100.0,
+        "model_count": 2,
+        "sparse_points": 5160,
+        "has_sparse_model_with_3_or_more_frames": true,
+        "failure_reason": null
+      },
+      {
+        "room_id": "R06_living_dining",
+        "interval_s": [
+          9.4,
+          40.4
+        ],
+        "match_confidence": "high",
+        "sampled_frames": 47,
+        "unique_registered_frames": 47,
+        "registered_frame_memberships": 50,
+        "largest_model_registered_frames": 47,
+        "largest_model_coverage_percent": 100.0,
+        "model_count": 2,
+        "sparse_points": 9104,
+        "has_sparse_model_with_3_or_more_frames": true,
+        "failure_reason": null
+      },
+      {
+        "room_id": "R07_kitchen",
+        "interval_s": [
+          41.7,
+          56.5
+        ],
+        "match_confidence": "high",
+        "sampled_frames": 23,
+        "unique_registered_frames": 2,
+        "registered_frame_memberships": 2,
+        "largest_model_registered_frames": 2,
+        "largest_model_coverage_percent": 8.7,
+        "model_count": 1,
+        "sparse_points": 474,
+        "has_sparse_model_with_3_or_more_frames": false,
+        "failure_reason": null
+      },
+      {
+        "room_id": "S01_master_walkin_closet",
+        "interval_s": [
+          122.5,
+          126.6
+        ],
+        "match_confidence": "medium",
+        "sampled_frames": 7,
+        "unique_registered_frames": 2,
+        "registered_frame_memberships": 2,
+        "largest_model_registered_frames": 2,
+        "largest_model_coverage_percent": 28.6,
+        "model_count": 1,
+        "sparse_points": 518,
+        "has_sparse_model_with_3_or_more_frames": false,
+        "failure_reason": null
+      }
+    ],
+    "sampled_frames": 181,
+    "capture_coverage_percent": null,
+    "model_count": null,
+    "largest_model_registered_frames": null,
+    "largest_model_coverage_percent": null,
+    "sparse_points_across_models": null,
+    "runtime_seconds": 472.559,
+    "coordinate_scale": "arbitrary_per_room"
+  },
+  "benchmark_gates": {
+    "status": "not_scored",
+    "reason": "Photo/video runs do not provide metric room polygons, dimension intervals, or opening predictions; the plan labels are not independent measurement truth.",
+    "missing_evidence": [
+      "Apartment LiDAR/Polycam capture",
+      "Independent tape/laser room, wall, ceiling, opening, and whole-property measurements",
+      "Door/opening widths and verified opening correspondences",
+      "Repeated same-room capture at each tier",
+      "Independent incumbent/app measurements for LiDAR comparison",
+      "Independent capture device/app/version metadata"
+    ]
+  },
+  "interpretation": [
+    "The rendered floor plan is a manually traced reference drawing, not inferred room geometry from the photos or video.",
+    "The uploaded stills show promotional listing marks and overlap visually with the walkthrough; treat them as correlated evidence, not independent camera-tier captures.",
+    "The segmented video clips were matched to plan room IDs by visual review. Their sparse models are arbitrary-scale and independent; their shared presence does not establish adjacency or a stitched 3D plan."
+  ]
+}

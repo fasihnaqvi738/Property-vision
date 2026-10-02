@@ -1,0 +1,62 @@
+{
+  "case_id": "apartment_case_01",
+  "source": "user-supplied files from Desktop/Apartment; originals preserved at source",
+  "floor_plan_file": "floor plan.jpeg",
+  "walkthrough_video_file": "apartment_video.mp4",
+  "video_room_segments_file": "video_room_segments.json",
+  "photo_groups": {
+    "R01_master_bedroom": [
+      "master bedroom1.jpeg",
+      "master bedroom 2.jpeg",
+      "master bedroom with separate walin closet.jpeg"
+    ],
+    "R02_second_bedroom": [
+      "2nd bedroom.jpeg",
+      "2nd bedroom 2.jpeg"
+    ],
+    "R03_third_bedroom": [
+      "3rd bedroom.jpeg",
+      "3rd bedroom 2.jpeg",
+      "3rd bedroom 3.jpeg"
+    ],
+    "R04_fourth_bedroom": [
+      "4th bedroom.jpeg",
+      "4th bedroom 2.jpeg"
+    ],
+    "R05_family_lounge": [
+      "family lounge 1.jpeg",
+      "family lounge 2.jpeg",
+      "family lounge 3.jpeg"
+    ],
+    "R06_living_dining": [
+      "living and dining.jpeg",
+      "living and dining 2.jpeg",
+      "living and dining 3.jpeg",
+      "living and dinin 4.jpeg"
+    ],
+    "R07_kitchen": [
+      "kitchen 1.jpeg",
+      "kitchen 2.jpeg",
+      "kitchen 3.jpeg",
+      "kitchen 4.jpeg"
+    ],
+    "C01_lobby": [
+      "lobby.jpeg",
+      "lobby 2.jpeg"
+    ]
+  },
+  "reference_only_photos": [
+    "3rd bedroom's bathroom.jpeg",
+    "4th bedroom's bathroom.jpeg",
+    "master bathroom.jpeg",
+    "4th bedroom's closet.jpeg",
+    "separate walkin closet for 2nd bedroom.jpeg"
+  ],
+  "notes": [
+    "Room folder labels are taken from user filenames. Plan-to-photo room mapping must be checked against the drawing.",
+    "Reference-only photos are single-view and are excluded from multi-view SfM room groups.",
+    "No apartment LiDAR capture was supplied.",
+    "Apartment plans are manual reference annotations; they are not outputs predicted from visual reconstruction.",
+    "Video room intervals are manually selected from the supplied edited walkthrough after visual matching to the supplied room photos."
+  ]
+}

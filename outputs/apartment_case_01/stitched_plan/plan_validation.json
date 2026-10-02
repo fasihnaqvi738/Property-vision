@@ -1,0 +1,24 @@
+{
+  "case_id": "apartment_case_01",
+  "status": "manual_reference_plan_rendered",
+  "room_count": 8,
+  "ancillary_space_count": 5,
+  "connector_count": 2,
+  "adjacency_count": 14,
+  "overlap_pair_count": 0,
+  "overlap_check": "No polygon intersections above four raster pixels in the traced source-image coordinate frame.",
+  "dimension_count": 12,
+  "dimension_status": "transcribed_from_source_plan_not_independently_measured",
+  "opening_widths_available": 0,
+  "source_limitations": [
+    "Room outlines are manually traced from the supplied raster drawing and remain in image-pixel coordinates; the raster was not independently calibrated to metric scale.",
+    "Printed room dimensions are reference values from the drawing, not independent tape or laser measurements.",
+    "Door/opening widths and wall thicknesses are not legible or dimensioned consistently; adjacency is recorded without a width claim.",
+    "No apartment LiDAR capture was supplied."
+  ],
+  "artifacts": {
+    "svg": "C:\\Property Vision\\property-vision\\outputs\\apartment_case_01\\stitched_plan\\stitched_reference_plan.svg",
+    "png_preview": "C:\\Property Vision\\property-vision\\outputs\\apartment_case_01\\stitched_plan\\stitched_reference_plan_preview.png",
+    "geojson": "C:\\Property Vision\\property-vision\\outputs\\apartment_case_01\\stitched_plan\\stitched_reference_plan.geojson"
+  }
+}

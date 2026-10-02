@@ -1,0 +1,821 @@
+{
+  "type": "FeatureCollection",
+  "name": "apartment_case_01",
+  "coordinate_reference": "source_image_pixels_origin_top_left",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "room_id": "R01_master_bedroom",
+        "plan_label": "MASTER BEDROOM WITH SUITE",
+        "dimensions_m": [
+          4.65,
+          4.04
+        ],
+        "dimension_source_text": "4.65 x 4.04",
+        "photo_folder": "photo_tier/R01_master_bedroom",
+        "video_evidence": [
+          {
+            "start_s": 109.1,
+            "end_s": 113.1
+          }
+        ],
+        "space_type": "room",
+        "geometry_status": "manual_reference_trace"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              108,
+              127
+            ],
+            [
+              429,
+              127
+            ],
+            [
+              429,
+              301
+            ],
+            [
+              108,
+              301
+            ],
+            [
+              108,
+              127
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "room_id": "R02_second_bedroom",
+        "plan_label": "BEDROOM-2",
+        "dimensions_m": [
+          3.85,
+          5.8
+        ],
+        "dimension_source_text": "3.85 x 5.80",
+        "photo_folder": "photo_tier/R02_second_bedroom",
+        "video_evidence": [],
+        "space_type": "room",
+        "geometry_status": "manual_reference_trace"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              367,
+              509
+            ],
+            [
+              488,
+              509
+            ],
+            [
+              488,
+              693
+            ],
+            [
+              367,
+              693
+            ],
+            [
+              367,
+              509
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "room_id": "R03_third_bedroom",
+        "plan_label": "GUEST BEDROOM",
+        "dimensions_m": [
+          3.6,
+          3.5
+        ],
+        "dimension_source_text": "3.60 x 3.50",
+        "photo_folder": "photo_tier/R03_third_bedroom",
+        "video_evidence": [
+          {
+            "start_s": 134.6,
+            "end_s": 140.0
+          }
+        ],
+        "space_type": "room",
+        "geometry_status": "manual_reference_trace"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              646,
+              124
+            ],
+            [
+              799,
+              124
+            ],
+            [
+              799,
+              302
+            ],
+            [
+              646,
+              302
+            ],
+            [
+              646,
+              124
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "room_id": "R04_fourth_bedroom",
+        "plan_label": "BEDROOM",
+        "dimensions_m": [
+          4.62,
+          4.05
+        ],
+        "dimension_source_text": "4.62 x 4.05",
+        "photo_folder": "photo_tier/R04_fourth_bedroom",
+        "video_evidence": [
+          {
+            "start_s": 150.8,
+            "end_s": 161.6
+          }
+        ],
+        "space_type": "room",
+        "geometry_status": "manual_reference_trace"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              128,
+              522
+            ],
+            [
+              363,
+              522
+            ],
+            [
+              363,
+              756
+            ],
+            [
+              128,
+              756
+            ],
+            [
+              128,
+              522
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "room_id": "R05_family_lounge",
+        "plan_label": "FAMILY LOUNGE",
+        "dimensions_m": [
+          7.27,
+          4.1
+        ],
+        "dimension_source_text": "7.27 x 4.10",
+        "photo_folder": "photo_tier/R05_family_lounge",
+        "video_evidence": [
+          {
+            "start_s": 78.1,
+            "end_s": 88.9
+          }
+        ],
+        "space_type": "room",
+        "geometry_status": "manual_reference_trace"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              355,
+              375
+            ],
+            [
+              573,
+              375
+            ],
+            [
+              573,
+              481
+            ],
+            [
+              355,
+              481
+            ],
+            [
+              355,
+              375
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "room_id": "R06_living_dining",
+        "plan_label": "LIVING/DINING ROOM",
+        "dimensions_m": [
+          10.42,
+          8.5
+        ],
+        "dimension_source_text": "10.42 x 8.50",
+        "photo_folder": "photo_tier/R06_living_dining",
+        "video_evidence": [
+          {
+            "start_s": 9.4,
+            "end_s": 40.4
+          }
+        ],
+        "space_type": "room",
+        "geometry_status": "manual_reference_trace"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              932,
+              112
+            ],
+            [
+              1336,
+              112
+            ],
+            [
+              1336,
+              446
+            ],
+            [
+              932,
+              446
+            ],
+            [
+              932,
+              112
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "room_id": "R07_kitchen",
+        "plan_label": "KITCHEN",
+        "dimensions_m": [
+          4.78,
+          4.6
+        ],
+        "dimension_source_text": "4.78 x 4.60",
+        "photo_folder": "photo_tier/R07_kitchen",
+        "video_evidence": [
+          {
+            "start_s": 41.7,
+            "end_s": 56.5
+          }
+        ],
+        "space_type": "room",
+        "geometry_status": "manual_reference_trace"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              1138,
+              475
+            ],
+            [
+              1328,
+              475
+            ],
+            [
+              1328,
+              633
+            ],
+            [
+              1138,
+              633
+            ],
+            [
+              1138,
+              475
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "room_id": "C01_lobby",
+        "plan_label": "LOBBY",
+        "dimensions_m": [
+          3.17,
+          3.46
+        ],
+        "dimension_source_text": "3.17 x 3.46",
+        "photo_folder": "photo_tier/C01_lobby",
+        "video_evidence": [
+          {
+            "start_s": 58.0,
+            "end_s": 75.4
+          }
+        ],
+        "space_kind": "lobby",
+        "space_type": "lobby",
+        "geometry_status": "manual_reference_trace"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              839,
+              344
+            ],
+            [
+              931,
+              344
+            ],
+            [
+              931,
+              453
+            ],
+            [
+              839,
+              453
+            ],
+            [
+              839,
+              344
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "room_id": "B01_master_bathroom",
+        "space_kind": "bathroom",
+        "plan_label": "TOILET / MASTER ENSUITE",
+        "dimensions_m": [
+          2.0,
+          4.3
+        ],
+        "dimension_source_text": "2.00 x 4.30",
+        "photo_reference": "master bathroom.jpeg",
+        "photo_count": 1,
+        "video_evidence": [
+          {
+            "start_s": 103.7,
+            "end_s": 108.0
+          }
+        ],
+        "space_type": "bathroom",
+        "geometry_status": "manual_reference_trace"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              471,
+              153
+            ],
+            [
+              536,
+              153
+            ],
+            [
+              536,
+              289
+            ],
+            [
+              471,
+              289
+            ],
+            [
+              471,
+              153
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "room_id": "B02_guest_bathroom",
+        "space_kind": "bathroom",
+        "plan_label": "TOILET / GUEST ENSUITE",
+        "dimensions_m": null,
+        "dimension_source_text": null,
+        "photo_reference": "3rd bedroom's bathroom.jpeg",
+        "photo_count": 1,
+        "video_evidence": [
+          {
+            "start_s": 141.4,
+            "end_s": 149.5
+          }
+        ],
+        "space_type": "bathroom",
+        "geometry_status": "manual_reference_trace"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              578,
+              165
+            ],
+            [
+              629,
+              165
+            ],
+            [
+              629,
+              293
+            ],
+            [
+              578,
+              293
+            ],
+            [
+              578,
+              165
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "room_id": "B03_fourth_bedroom_bathroom",
+        "space_kind": "bathroom",
+        "plan_label": "TOILET",
+        "dimensions_m": [
+          3.94,
+          2.0
+        ],
+        "dimension_source_text": "3.94 x 2.00",
+        "photo_reference": "4th bedroom's bathroom.jpeg",
+        "photo_count": 1,
+        "video_evidence": [
+          {
+            "start_s": 164.3,
+            "end_s": 169.6
+          }
+        ],
+        "space_type": "bathroom",
+        "geometry_status": "manual_reference_trace"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              80,
+              435
+            ],
+            [
+              278,
+              435
+            ],
+            [
+              278,
+              520
+            ],
+            [
+              80,
+              520
+            ],
+            [
+              80,
+              435
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "room_id": "B04_second_bedroom_bathroom",
+        "space_kind": "bathroom",
+        "plan_label": "TOILET",
+        "dimensions_m": [
+          2.0,
+          2.9
+        ],
+        "dimension_source_text": "2.00 x 2.90",
+        "photo_reference": null,
+        "photo_count": 0,
+        "space_type": "bathroom",
+        "geometry_status": "manual_reference_trace"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              489,
+              522
+            ],
+            [
+              568,
+              522
+            ],
+            [
+              568,
+              692
+            ],
+            [
+              489,
+              692
+            ],
+            [
+              489,
+              522
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "room_id": "S01_master_walkin_closet",
+        "space_kind": "walk_in_closet",
+        "plan_label": "3'7\" WIDE WIC",
+        "dimensions_m": [
+          1.09,
+          null
+        ],
+        "dimension_source_text": "3'7\" wide",
+        "photo_reference": "master bedroom with separate walin closet.jpeg",
+        "photo_count": 1,
+        "video_evidence": [
+          {
+            "start_s": 122.5,
+            "end_s": 126.6
+          }
+        ],
+        "space_type": "walk_in_closet",
+        "geometry_status": "manual_reference_trace"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              180,
+              27
+            ],
+            [
+              326,
+              27
+            ],
+            [
+              326,
+              109
+            ],
+            [
+              180,
+              109
+            ],
+            [
+              180,
+              27
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "connector_id": "C02_north_passage",
+        "plan_label": "1.50 M WIDE PASSAGE",
+        "width_m": 1.5,
+        "width_source_text": "1.50 M WIDE PASSAGE",
+        "space_type": "connector",
+        "geometry_status": "manual_reference_trace"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              284,
+              303
+            ],
+            [
+              838,
+              303
+            ],
+            [
+              838,
+              370
+            ],
+            [
+              284,
+              370
+            ],
+            [
+              284,
+              303
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "connector_id": "C03_east_corridor",
+        "plan_label": "CORRIDOR",
+        "width_m": null,
+        "width_source_text": null,
+        "space_type": "connector",
+        "geometry_status": "manual_reference_trace"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              773,
+              553
+            ],
+            [
+              1001,
+              553
+            ],
+            [
+              1001,
+              584
+            ],
+            [
+              1122,
+              584
+            ],
+            [
+              1122,
+              625
+            ],
+            [
+              1055,
+              625
+            ],
+            [
+              1055,
+              610
+            ],
+            [
+              1001,
+              610
+            ],
+            [
+              1001,
+              620
+            ],
+            [
+              773,
+              620
+            ],
+            [
+              773,
+              553
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "feature_type": "room_adjacency",
+        "edges": [
+          {
+            "space_a": "R01_master_bedroom",
+            "space_b": "C02_north_passage",
+            "connection": "door/opening shown on source plan",
+            "opening_width_m": null
+          },
+          {
+            "space_a": "R03_third_bedroom",
+            "space_b": "C02_north_passage",
+            "connection": "door/opening shown on source plan",
+            "opening_width_m": null
+          },
+          {
+            "space_a": "R05_family_lounge",
+            "space_b": "C02_north_passage",
+            "connection": "open connection shown on source plan",
+            "opening_width_m": null
+          },
+          {
+            "space_a": "C02_north_passage",
+            "space_b": "C01_lobby",
+            "connection": "passage to lobby circulation",
+            "opening_width_m": null
+          },
+          {
+            "space_a": "R06_living_dining",
+            "space_b": "C01_lobby",
+            "connection": "entrance/opening shown on source plan",
+            "opening_width_m": null
+          },
+          {
+            "space_a": "C01_lobby",
+            "space_b": "C03_east_corridor",
+            "connection": "corridor circulation",
+            "opening_width_m": null
+          },
+          {
+            "space_a": "R07_kitchen",
+            "space_b": "C03_east_corridor",
+            "connection": "door/opening shown on source plan",
+            "opening_width_m": null
+          },
+          {
+            "space_a": "R02_second_bedroom",
+            "space_b": "C03_east_corridor",
+            "connection": "door/opening shown on source plan",
+            "opening_width_m": null
+          },
+          {
+            "space_a": "R04_fourth_bedroom",
+            "space_b": "C03_east_corridor",
+            "connection": "door/opening shown on source plan",
+            "opening_width_m": null
+          },
+          {
+            "space_a": "R01_master_bedroom",
+            "space_b": "B01_master_bathroom",
+            "connection": "ensuite doorway shown on source plan",
+            "opening_width_m": null
+          },
+          {
+            "space_a": "R03_third_bedroom",
+            "space_b": "B02_guest_bathroom",
+            "connection": "ensuite doorway shown on source plan",
+            "opening_width_m": null
+          },
+          {
+            "space_a": "R04_fourth_bedroom",
+            "space_b": "B03_fourth_bedroom_bathroom",
+            "connection": "ensuite doorway shown on source plan",
+            "opening_width_m": null
+          },
+          {
+            "space_a": "R02_second_bedroom",
+            "space_b": "B04_second_bedroom_bathroom",
+            "connection": "ensuite doorway shown on source plan",
+            "opening_width_m": null
+          },
+          {
+            "space_a": "R01_master_bedroom",
+            "space_b": "S01_master_walkin_closet",
+            "connection": "closet opening shown on source plan",
+            "opening_width_m": null
+          }
+        ]
+      },
+      "geometry": null
+    }
+  ]
+}

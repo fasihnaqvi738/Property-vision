@@ -1,0 +1,91 @@
+{
+  "case_id": "apartment_case_01",
+  "source_video": "apartment_video.mp4",
+  "selection_method": "human-reviewed stable spans from the supplied promotional walkthrough, cross-checked against the supplied room photos",
+  "video_is_continuous_capture": false,
+  "segments": [
+    {
+      "room_id": "R06_living_dining",
+      "start_s": 9.4,
+      "end_s": 40.4,
+      "visual_match": "Dining table and living seating match the supplied living/dining photos.",
+      "match_confidence": "high"
+    },
+    {
+      "room_id": "R07_kitchen",
+      "start_s": 41.7,
+      "end_s": 56.5,
+      "visual_match": "Kitchen island, cabinets, and appliances match the supplied kitchen photos.",
+      "match_confidence": "high"
+    },
+    {
+      "room_id": "C01_lobby",
+      "start_s": 58.0,
+      "end_s": 75.4,
+      "visual_match": "Entry hall and view toward the living area match the supplied lobby photos.",
+      "match_confidence": "high"
+    },
+    {
+      "room_id": "R05_family_lounge",
+      "start_s": 78.1,
+      "end_s": 88.9,
+      "visual_match": "Artwork, sofa, shelving, and blue chair match the supplied family lounge photos.",
+      "match_confidence": "high"
+    },
+    {
+      "room_id": "B01_master_bathroom",
+      "start_s": 103.7,
+      "end_s": 108.0,
+      "visual_match": "Double vanity and marble wall match the supplied master bathroom photo.",
+      "match_confidence": "high"
+    },
+    {
+      "room_id": "R01_master_bedroom",
+      "start_s": 109.1,
+      "end_s": 113.1,
+      "visual_match": "Bedroom bed wall and furnishings are consistent with the master suite shown in the supplied photos.",
+      "match_confidence": "medium"
+    },
+    {
+      "room_id": "S01_master_walkin_closet",
+      "start_s": 122.5,
+      "end_s": 126.6,
+      "visual_match": "Wardrobe and dressing area are consistent with the supplied walk-in closet reference photo.",
+      "match_confidence": "medium"
+    },
+    {
+      "room_id": "R03_third_bedroom",
+      "start_s": 134.6,
+      "end_s": 140.0,
+      "visual_match": "Bed, round mirror, and wall-mounted television match one supplied third-bedroom photo.",
+      "match_confidence": "high"
+    },
+    {
+      "room_id": "B02_guest_bathroom",
+      "start_s": 141.4,
+      "end_s": 149.5,
+      "visual_match": "Dark vanity, shower, and window match the supplied third-bedroom bathroom photo.",
+      "match_confidence": "high"
+    },
+    {
+      "room_id": "R04_fourth_bedroom",
+      "start_s": 150.8,
+      "end_s": 161.6,
+      "visual_match": "Yellow accent pillow, bed, and wall decor match the supplied fourth-bedroom photos.",
+      "match_confidence": "high"
+    },
+    {
+      "room_id": "B03_fourth_bedroom_bathroom",
+      "start_s": 164.3,
+      "end_s": 169.6,
+      "visual_match": "Beige marble vanity and shower match the supplied fourth-bedroom bathroom photo.",
+      "match_confidence": "high"
+    }
+  ],
+  "limitations": [
+    "These are cropped intervals from a promotional video, not independent room recordings; titles and room labels are inferred from visual matching.",
+    "Promotional edits, camera motion, overlays, and crossfades can reduce SfM registration; interval boundaries deliberately avoid obvious transitions.",
+    "Video-only sparse models have arbitrary scale and do not provide measured room geometry, door widths, or metric room placement.",
+    "The fourth-bedroom ensuite video interval is identified by its visual match to the supplied bathroom photo; its association to the labeled room is not independently surveyed."
+  ]
+}
