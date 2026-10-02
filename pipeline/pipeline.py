@@ -1,6 +1,7 @@
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from time import perf_counter
 
 from pipeline.ingest.capture import load_capture
 from pipeline.ingest.types import CaptureType
@@ -10,8 +11,11 @@ from pipeline.results import build_result
 from pipeline.validation import validate_result
 
 
-def _write_result(result: dict, result_path: Path) -> Path:
+def _write_result(result: dict, result_path: Path, started_at: float) -> Path:
     """Validate every tier's output before persisting the shared contract."""
+    result["reconstruction"]["summary"]["processing_runtime_seconds"] = round(
+        perf_counter() - started_at, 3
+    )
     validate_result(result)
     result_path.parent.mkdir(parents=True, exist_ok=True)
     result_path.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
@@ -40,6 +44,7 @@ def _serialize_boundary_hypotheses(hypotheses: list[dict]) -> list[dict]:
 
 
 def run_pipeline(input_path: str, output_root: str = "outputs") -> Path:
+    started_at = perf_counter()
     capture = load_capture(input_path)
     if capture.capture_type is CaptureType.RGBD:
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
@@ -97,7 +102,7 @@ def run_pipeline(input_path: str, output_root: str = "outputs") -> Path:
                 else []
             ),
         )
-        return _write_result(result, run_dir / "result.json")
+        return _write_result(result, run_dir / "result.json", started_at)
 
     if capture.capture_type is CaptureType.VIDEO:
         video_extensions = {".mp4", ".mov", ".m4v", ".avi"}
@@ -164,7 +169,7 @@ def run_pipeline(input_path: str, output_root: str = "outputs") -> Path:
             raw_capture=[str(video_path.resolve())],
             debug_views=[str(run_dir / sampling["contact_sheet"])],
         )
-        return _write_result(result, run_dir / "result.json")
+        return _write_result(result, run_dir / "result.json", started_at)
 
     if capture.capture_type is not CaptureType.PHOTO:
         raise NotImplementedError(
@@ -208,4 +213,4 @@ def run_pipeline(input_path: str, output_root: str = "outputs") -> Path:
         limitations=limitations,
         raw_capture=[str(capture.path.resolve())],
     )
-    return _write_result(result, run_dir / "result.json")
+    return _write_result(result, run_dir / "result.json", started_at)
