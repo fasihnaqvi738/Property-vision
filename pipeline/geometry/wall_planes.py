@@ -100,9 +100,26 @@ def analyze_wall_planes(
         height = patch[:, v_axis]
         length_m = float(np.percentile(along, 98) - np.percentile(along, 2))
         height_m = float(np.percentile(height, 98) - np.percentile(height, 2))
+        horizontal_normal = normal[h_axes].astype(np.float64)
+        horizontal_normal /= max(float(np.linalg.norm(horizontal_normal)), 1e-8)
+        horizontal_tangent = np.array([-horizontal_normal[1], horizontal_normal[0]])
+        horizontal_patch = patch[:, h_axes].astype(np.float64)
+        along_horizontal = horizontal_patch @ horizontal_tangent
+        along_lo, along_hi = np.percentile(along_horizontal, [2, 98])
+        normal_coordinate = float(np.median(horizontal_patch @ horizontal_normal))
+        endpoint_a = horizontal_normal * normal_coordinate + horizontal_tangent * along_lo
+        endpoint_b = horizontal_normal * normal_coordinate + horizontal_tangent * along_hi
+        horizontal_offset = -normal_coordinate
         planes.append({
             "normal": [round(float(value), 5) for value in normal],
             "offset_m": round(float(-np.dot(normal, centroid)), 5),
+            "horizontal_normal": [round(float(value), 6) for value in horizontal_normal],
+            "horizontal_offset_m": round(horizontal_offset, 5),
+            "projected_endpoints_m": [
+                [round(float(value), 4) for value in endpoint_a],
+                [round(float(value), 4) for value in endpoint_b],
+            ],
+            "along_interval_m": [round(float(along_lo), 4), round(float(along_hi), 4)],
             "point_count": int(len(patch)),
             "observed_length_m": round(length_m, 3),
             "observed_height_m": round(height_m, 3),
@@ -113,6 +130,10 @@ def analyze_wall_planes(
         residual[inlier_indices] = False
 
     planes.sort(key=lambda plane: plane["point_count"], reverse=True)
+    planes = _deduplicate_overlapping_planes(planes)
+    for index, plane in enumerate(planes):
+        plane["candidate_id"] = f"wall_candidate_{index + 1}"
+    boundaries = _find_closed_boundary_hypotheses(planes)
     preview_path = Path(output_dir) / "wall_plane_candidates.png"
     _write_preview(cloud, planes, v_axis, h_axes, preview_path)
     return {
@@ -124,17 +145,187 @@ def analyze_wall_planes(
         "voxel_resolution_m": voxel,
         "ransac_distance_threshold_m": distance_threshold,
         "candidate_count": len(planes),
-        "wall_plane_candidates": [
-            {"candidate_id": f"wall_candidate_{index + 1}", **plane}
-            for index, plane in enumerate(planes)
-        ],
+        "deduplication": {
+            "method": "Suppress near-coplanar detections with overlapping projected wall spans.",
+            "normal_angle_threshold_degrees": 4,
+            "plane_separation_threshold_m": 0.20,
+            "minimum_overlap_fraction": 0.5,
+            "candidate_count_before_deduplication": int(sum(p["merged_detection_count"] for p in planes)),
+            "candidate_count_after_deduplication": len(planes),
+        },
+        "wall_plane_candidates": planes,
+        "room_boundary_hypotheses": boundaries,
         "preview": preview_path.name,
         "limitations": [
             "Plane lengths, heights, and patch areas describe sampled planar support, not verified room dimensions or complete surface areas.",
             "Candidate extent values are uncalibrated diagnostics and do not have validated confidence intervals.",
             "Candidate gaps are missing-return regions and may result from occlusion, sparse sampling, or reconstruction error; they are not classified openings.",
             "Gravity orientation, depth scale, camera registration, and pose accuracy remain unvalidated against ground truth.",
-            "Room boundaries, adjacency, opening dimensions, and a rendered floor plan are not produced.",
+            "Closed endpoint cycles are boundary hypotheses only; they are not semantic room segmentation, adjacency, opening dimensions, or an accepted rendered floor plan.",
+        ],
+    }
+
+
+def _deduplicate_overlapping_planes(planes: list[dict]) -> list[dict]:
+    """Collapse repeated detections of the same wall span, preserving support evidence."""
+    angle_limit = float(np.cos(np.deg2rad(4.0)))
+    separation_limit = 0.20
+    minimum_overlap = 0.5
+    kept: list[dict] = []
+    for candidate in planes:
+        duplicate = None
+        for existing in kept:
+            n1 = np.asarray(candidate["horizontal_normal"], dtype=np.float64)
+            n2 = np.asarray(existing["horizontal_normal"], dtype=np.float64)
+            d1 = float(candidate["horizontal_offset_m"])
+            d2 = float(existing["horizontal_offset_m"])
+            if float(np.dot(n1, n2)) < 0:
+                n2, d2 = -n2, -d2
+            if float(np.dot(n1, n2)) < angle_limit or abs(d1 - d2) > separation_limit:
+                continue
+            interval_a = candidate["along_interval_m"]
+            interval_b = existing["along_interval_m"]
+            overlap = max(0.0, min(interval_a[1], interval_b[1]) - max(interval_a[0], interval_b[0]))
+            shorter = min(interval_a[1] - interval_a[0], interval_b[1] - interval_b[0])
+            if shorter > 0 and overlap / shorter >= minimum_overlap:
+                duplicate = existing
+                break
+        if duplicate is None:
+            candidate["merged_detection_count"] = 1
+            candidate["merged_support_point_count"] = int(candidate["point_count"])
+            kept.append(candidate)
+        else:
+            duplicate["merged_detection_count"] += 1
+            duplicate["merged_support_point_count"] += int(candidate["point_count"])
+            # Retain the union extent along the existing line, but do not bridge
+            # disjoint segments: candidates are merged only when spans overlap.
+            duplicate["along_interval_m"] = [
+                round(min(duplicate["along_interval_m"][0], candidate["along_interval_m"][0]), 4),
+                round(max(duplicate["along_interval_m"][1], candidate["along_interval_m"][1]), 4),
+            ]
+            duplicate["observed_length_m"] = round(
+                duplicate["along_interval_m"][1] - duplicate["along_interval_m"][0], 3
+            )
+            duplicate["observed_patch_area_m2"] = round(
+                duplicate["observed_length_m"] * duplicate["observed_height_m"], 3
+            )
+    return kept
+
+
+def _find_closed_boundary_hypotheses(planes: list[dict], *, snap_tolerance_m: float = 0.30) -> dict:
+    """Find small cycles by snapping detected wall endpoints; never labels a room."""
+    endpoints = []
+    for edge_index, plane in enumerate(planes):
+        segment = plane.get("projected_endpoints_m", [])
+        if len(segment) != 2:
+            continue
+        endpoints.append((edge_index, 0, np.asarray(segment[0], dtype=np.float64)))
+        endpoints.append((edge_index, 1, np.asarray(segment[1], dtype=np.float64)))
+
+    nodes: list[np.ndarray] = []
+    assignments: dict[tuple[int, int], int] = {}
+    for edge_index, endpoint_index, point in endpoints:
+        choices = [(float(np.linalg.norm(point - node)), node_id) for node_id, node in enumerate(nodes)]
+        if choices and min(choices)[0] <= snap_tolerance_m:
+            _, node_id = min(choices)
+            # Keep a stable node location for deterministic cycle evidence.
+        else:
+            node_id = len(nodes)
+            nodes.append(point.copy())
+        assignments[(edge_index, endpoint_index)] = node_id
+
+    graph: dict[int, list[tuple[int, int]]] = {node_id: [] for node_id in range(len(nodes))}
+    for edge_index, plane in enumerate(planes):
+        a, b = assignments.get((edge_index, 0)), assignments.get((edge_index, 1))
+        if a is None or b is None or a == b:
+            continue
+        graph[a].append((b, edge_index))
+        graph[b].append((a, edge_index))
+
+    found: dict[tuple[int, ...], tuple[list[int], list[int]]] = {}
+    max_cycle_edges = min(8, len(planes))
+    for start in graph:
+        def walk(node: int, path_nodes: list[int], path_edges: list[int]) -> None:
+            if len(path_edges) >= max_cycle_edges:
+                return
+            for neighbor, edge_index in graph[node]:
+                if path_edges and edge_index == path_edges[-1]:
+                    continue
+                if neighbor == start and len(path_edges) >= 2:
+                    cycle_edges = path_edges + [edge_index]
+                    cycle_nodes = path_nodes + [start]
+                    canonical_edges = tuple(sorted(cycle_edges))
+                    if canonical_edges not in found and len(set(cycle_edges)) == len(cycle_edges):
+                        found[canonical_edges] = (cycle_nodes[:-1], cycle_edges)
+                elif neighbor not in path_nodes and len(path_edges) < max_cycle_edges - 1:
+                    walk(neighbor, path_nodes + [neighbor], path_edges + [edge_index])
+
+        walk(start, [start], [])
+
+    hypotheses = []
+    for cycle_nodes, cycle_edges in found.values():
+        if len(cycle_nodes) < 3:
+            continue
+        polygon = np.asarray([nodes[node] for node in cycle_nodes], dtype=np.float64)
+        x, y = polygon[:, 0], polygon[:, 1]
+        area = 0.5 * abs(float(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1))))
+        perimeter = sum(
+            float(np.linalg.norm(polygon[(i + 1) % len(polygon)] - polygon[i]))
+            for i in range(len(polygon))
+        )
+        if area < 1.0 or perimeter > 40.0:
+            continue
+        hypotheses.append({
+            "hypothesis_id": f"boundary_hypothesis_{len(hypotheses) + 1}",
+            "status": "unverified_closed_wall_endpoint_cycle",
+            "wall_candidate_ids": [planes[index]["candidate_id"] for index in cycle_edges],
+            "vertices_xy_m": [[round(float(a), 3), round(float(b), 3)] for a, b in polygon],
+            "perimeter_extent_m": round(perimeter, 3),
+            "enclosed_area_extent_m2": round(area, 3),
+            "endpoint_snap_tolerance_m": snap_tolerance_m,
+        })
+    hypotheses.sort(key=lambda item: item["enclosed_area_extent_m2"])
+    open_nodes = [node_id for node_id, neighbors in graph.items() if len(neighbors) == 1]
+    nearest_gaps = []
+    seen_pairs = set()
+    for i, node_a in enumerate(open_nodes):
+        for node_b in graph:
+            if node_a == node_b or any(neighbor == node_b for neighbor, _ in graph[node_a]):
+                continue
+            if node_b in open_nodes and open_nodes.index(node_b) < i:
+                continue
+            distance = float(np.linalg.norm(nodes[node_a] - nodes[node_b]))
+            if not snap_tolerance_m < distance <= 1.5:
+                continue
+            pair = tuple(sorted((node_a, node_b)))
+            if pair in seen_pairs:
+                continue
+            seen_pairs.add(pair)
+            candidate_a = graph[node_a][0][1]
+            candidate_b = min(
+                graph[node_b],
+                key=lambda item: float(np.linalg.norm(nodes[item[0]] - nodes[node_a])),
+            )[1]
+            nearest_gaps.append({
+                "candidate_a": planes[candidate_a]["candidate_id"],
+                "endpoint_a_xy_m": [round(float(value), 3) for value in nodes[node_a]],
+                "candidate_b": planes[candidate_b]["candidate_id"],
+                "endpoint_b_xy_m": [round(float(value), 3) for value in nodes[node_b]],
+                "gap_extent_m": round(distance, 3),
+                "status": "unverified_open_boundary_gap",
+            })
+    nearest_gaps.sort(key=lambda item: item["gap_extent_m"])
+    return {
+        "status": "diagnostic_only",
+        "method": "Closed cycles in projected wall-segment endpoints after spatial snapping.",
+        "candidate_count": len(hypotheses),
+        "hypotheses": hypotheses,
+        "open_endpoint_count": len(open_nodes),
+        "nearby_unclosed_endpoint_gaps": nearest_gaps[:10],
+        "limitations": [
+            "An endpoint cycle can enclose several rooms or a partial property boundary and is not assigned a room identity.",
+            "Endpoint snapping and extents are uncalibrated; cycles are not measurements with validated confidence intervals.",
+            "Nearby open endpoints may be separated by occlusion, a doorway, an omitted wall, or unrelated surfaces; gaps are not classified.",
         ],
     }
 
