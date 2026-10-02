@@ -1,6 +1,6 @@
 # Property Vision
 
-An early computer-vision prototype for reconstructing a sparse 3D scene from one room's photos.
+An early computer-vision prototype for reconstructing a sparse 3D scene from room photos or RGB-D captures.
 
 ## Current photo workflow
 
@@ -36,7 +36,17 @@ Each run creates a timestamped folder under `outputs` (or the selected output di
 - `reconstruction\models\<id>\points.ply`: sparse point cloud, viewable in CloudCompare, MeshLab, or another PLY viewer.
 - `reconstruction\database.db`: COLMAP feature and match database used for the run.
 
-The model has arbitrary scale. It is not yet a dimensioned room plan and does not report walls, openings, room area, damage, or confidence intervals. Video, LiDAR, and HEIC ingestion are not implemented. Each run writes to a new folder, so previous results are retained.
+The model has arbitrary scale. It is not yet a dimensioned room plan and does not report walls, openings, room area, damage, or confidence intervals. Video-only, standalone point-cloud, and HEIC ingestion are not implemented. Each run writes to a new folder, so previous results are retained.
+
+## RGB-D capture workflow
+
+The supplied RGB-D bundle can be passed directly as the capture folder. It must contain `depth/`, `confidence/`, `rgb.mp4`, `camera_matrix.csv`, and `odometry.csv`:
+
+```powershell
+python main.py "captures\c00a170fe1"
+```
+
+This creates `rgbd_point_cloud.ply` and `result.json` in a timestamped output folder. The initial export samples every tenth depth frame and every fourth pixel. It treats depth values as millimeters and odometry poses as camera-to-world transforms; both assumptions are recorded in the manifest and need validation before treating the cloud as metric. The RGB video is not yet used for color because frame timing and image-to-depth alignment have not been verified. This stage exports a point cloud only; it does not create a floor plan or room measurements.
 
 ## Current limitations
 

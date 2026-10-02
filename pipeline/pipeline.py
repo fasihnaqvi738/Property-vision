@@ -4,11 +4,18 @@ from pathlib import Path
 
 from pipeline.ingest.capture import load_capture
 from pipeline.ingest.types import CaptureType
+from pipeline.ingest.rgbd import reconstruct_rgbd
 from pipeline.reconstruction.colmap import reconstruct_from_images
 
 
 def run_pipeline(input_path: str, output_root: str = "outputs") -> Path:
     capture = load_capture(input_path)
+    if capture.capture_type is CaptureType.RGBD:
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+        run_dir = Path(output_root) / f"{capture.path.name}_{timestamp}"
+        result = reconstruct_rgbd(capture.path, run_dir)
+        return run_dir / "result.json"
+
     if capture.capture_type is not CaptureType.PHOTO:
         raise NotImplementedError(
             f"The photo reconstruction workflow does not support "
