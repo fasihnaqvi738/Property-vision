@@ -67,12 +67,49 @@ def analyze_floor_returns(
     ]
     candidates.sort(key=lambda item: item[1], reverse=True)
 
+    coverage_outline = None
+    coverage_outline_area = None
+    coverage_component_label = None
+    coverage_mask = None
+    if candidates:
+        coverage_component_label = candidates[0][0]
+        coverage_mask = (labels == coverage_component_label).astype(np.uint8)
+        contours, _ = cv2.findContours(coverage_mask.T, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if contours:
+            contour = max(contours, key=cv2.contourArea)
+            simplified = cv2.approxPolyDP(contour, 1.5, True).reshape(-1, 2)
+            coverage_outline = [
+                [
+                    round(float(a_edges[int(a_index)] + grid_resolution_m / 2), 3),
+                    round(float(b_edges[int(b_index)] + grid_resolution_m / 2), 3),
+                ]
+                for a_index, b_index in simplified
+            ]
+            if len(coverage_outline) >= 3:
+                coverage_outline.append(coverage_outline[0])
+                coverage_outline_area = round(
+                    abs(float(cv2.contourArea(contour))) * grid_resolution_m ** 2, 3
+                )
+            else:
+                coverage_outline = None
+
     preview = np.zeros(occupancy.shape, dtype=np.uint8)
     for order, (label, _) in enumerate(candidates):
         preview[labels == label] = 220 if order == 0 else 120
     preview = cv2.flip(preview.T, 0)
     image = cv2.cvtColor(preview, cv2.COLOR_GRAY2BGR)
+    if coverage_mask is not None:
+        contours, _ = cv2.findContours(coverage_mask.T, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        outline_pixels = []
+        b_count = coverage_mask.shape[1]
+        for contour in contours:
+            mapped = contour.copy()
+            mapped[:, 0, 1] = b_count - 1 - mapped[:, 0, 1]
+            outline_pixels.append(mapped)
+        if outline_pixels:
+            cv2.drawContours(image, outline_pixels, -1, (0, 140, 255), 1, cv2.LINE_AA)
     image = cv2.resize(image, (image.shape[1] * 4, image.shape[0] * 4), interpolation=cv2.INTER_NEAREST)
+    image = cv2.copyMakeBorder(image, 42, 20, 20, 20, cv2.BORDER_CONSTANT, value=(0, 0, 0))
     cv2.putText(
         image,
         f"Floor-return coverage only | axis={('xyz'[vertical_axis])} | level={floor_level:.2f} m | grid={grid_resolution_m:.2f} m",
@@ -104,6 +141,20 @@ def analyze_floor_returns(
             }
             for label, cells in candidates
         ],
+        "largest_component_coverage_outline": {
+            "status": "diagnostic_only" if coverage_outline else "unavailable",
+            "component_label": coverage_component_label,
+            "coordinates_axes": ["xyz"[horizontal_axes[0]], "xyz"[horizontal_axes[1]]],
+            "vertices_m": coverage_outline or [],
+            "vertex_count": max(0, len(coverage_outline or []) - 1),
+            "observed_cell_area_m2": round(candidates[0][1] * grid_resolution_m ** 2, 3) if candidates else None,
+            "outline_area_m2": coverage_outline_area,
+            "limitations": [
+                "This polygon outlines the connected area of observed floor returns, not a verified room footprint.",
+                "Furniture, occlusion, incomplete scan coverage, floor-level error, and pose drift can change this outline.",
+                "No room identity, wall boundary, opening, or calibrated confidence interval is inferred.",
+            ],
+        },
         "preview": preview_path.name,
         "limitations": [
             "The vertical-axis and floor-level heuristics are provisional.",
