@@ -78,6 +78,9 @@ def _validate_manifest(manifest: dict, manifest_path: Path) -> None:
             for edge_index, edge in enumerate(adjacency):
                 if not isinstance(edge, dict) or not isinstance(edge.get("room_a"), str) or not isinstance(edge.get("room_b"), str):
                     errors.append(f"property.adjacency[{edge_index}] must include string room_a and room_b IDs.")
+        connector_ids = property_truth.get("connector_room_ids", [])
+        if not isinstance(connector_ids, list) or any(not isinstance(room_id, str) for room_id in connector_ids):
+            errors.append("property.connector_room_ids must be an array of room ID strings.")
     rooms = manifest.get("ground_truth_rooms")
     if not isinstance(rooms, list) or not rooms:
         errors.append("ground_truth_rooms must be a non-empty array.")
@@ -153,8 +156,98 @@ def _validate_manifest(manifest: dict, manifest_path: Path) -> None:
             for match_index, match in enumerate(matches):
                 if not isinstance(match, dict) or keys[0] not in match or keys[1] not in match:
                     errors.append(f"{label}.{collection}[{match_index}] must include {keys[0]} and {keys[1]}.")
+    damage_examples = manifest.get("staged_damage_examples", [])
+    if not isinstance(damage_examples, list):
+        errors.append("staged_damage_examples must be an array.")
+    else:
+        for index, example in enumerate(damage_examples):
+            label = f"staged_damage_examples[{index}]"
+            if not isinstance(example, dict):
+                errors.append(f"{label} must be an object.")
+                continue
+            if not isinstance(example.get("room_id"), str) or example["room_id"] not in room_ids:
+                errors.append(f"{label}.room_id must match a declared room_id.")
+            if not isinstance(example.get("damage_class"), str) or not example["damage_class"].strip():
+                errors.append(f"{label}.damage_class must be a non-empty string.")
+            extent = example.get("extent_m2")
+            if extent is not None and (not isinstance(extent, (int, float)) or isinstance(extent, bool) or extent <= 0):
+                errors.append(f"{label}.extent_m2 must be a positive number or null.")
+            if not isinstance(example.get("photo_paths", []), list):
+                errors.append(f"{label}.photo_paths must be an array.")
     if errors:
         raise ValueError("Invalid benchmark manifest:\n- " + "\n- ".join(errors))
+
+
+def _benchmark_readiness(manifest: dict) -> dict:
+    """Show evidence coverage independently from metric-accuracy scores."""
+    rooms = manifest.get("ground_truth_rooms", [])
+    room_ids = {room.get("room_id") for room in rooms if isinstance(room, dict)}
+    property_truth = manifest.get("property", {})
+    connector_ids = set(property_truth.get("connector_room_ids", [])) if isinstance(property_truth, dict) else set()
+    habitable_rooms = room_ids - connector_ids
+    runs = manifest.get("runs", [])
+    tiers = {"photo", "video", "lidar"}
+    tier_rooms = {
+        tier: {str(run.get("room_id")) for run in runs if run.get("tier") == tier}
+        for tier in tiers
+    }
+    repeated = defaultdict(int)
+    for run in runs:
+        if run.get("repeat_group"):
+            repeated[(str(run.get("room_id")), str(run.get("tier")), str(run["repeat_group"]))] += 1
+    damage_examples = manifest.get("staged_damage_examples", [])
+    damage_classes = {
+        str(example.get("damage_class", "")).strip()
+        for example in damage_examples if isinstance(example, dict) and example.get("damage_class")
+    }
+    measured_rooms = [
+        room for room in rooms if isinstance(room, dict)
+        and isinstance(room.get("ceiling_height_m"), (int, float))
+        and isinstance(room.get("floor_area_m2"), (int, float))
+        and room.get("walls")
+        and all(isinstance(wall, dict) and isinstance(wall.get("length_m"), (int, float)) for wall in room["walls"])
+    ]
+    common_tier_rooms = room_ids.intersection(*(tier_rooms[tier] for tier in tiers)) if tiers else set()
+    checks = {
+        "room_set": {
+            "passed": len(habitable_rooms) >= 3 and bool(connector_ids & room_ids),
+            "rooms": len(habitable_rooms), "required_rooms": 3,
+            "connector_ids": sorted(connector_ids & room_ids),
+            "detail": "Requires at least three rooms and one declared connector/hall.",
+        },
+        "measured_ground_truth": {
+            "passed": (
+                len(measured_rooms) == len(room_ids)
+                and isinstance(property_truth, dict)
+                and isinstance(property_truth.get("footprint_m2"), (int, float))
+                and bool(property_truth.get("adjacency"))
+                and any(room.get("openings") for room in rooms if isinstance(room, dict))
+            ),
+            "rooms_with_area_ceiling_and_wall_lengths": len(measured_rooms),
+            "rooms_declared": len(room_ids),
+            "property_footprint_measured": isinstance(property_truth, dict) and isinstance(property_truth.get("footprint_m2"), (int, float)),
+            "adjacency_edges": len(property_truth.get("adjacency", [])) if isinstance(property_truth, dict) else 0,
+            "detail": "Requires measured room area, ceiling height, wall lengths, property footprint/adjacency, and at least one measured opening.",
+        },
+        "same_rooms_all_tiers": {
+            "passed": bool(room_ids) and common_tier_rooms == room_ids,
+            "rooms_with_photo_video_lidar": sorted(common_tier_rooms),
+            "rooms_missing_any_tier": sorted(room_ids - common_tier_rooms),
+        },
+        "repeat_capture": {
+            "passed": any(count >= 2 for count in repeated.values()),
+            "repeat_groups_with_two_or_more_runs": sum(count >= 2 for count in repeated.values()),
+        },
+        "staged_damage": {
+            "passed": len(damage_examples) >= 2 and len(damage_classes) >= 2
+            and all(isinstance(example, dict) and example.get("photo_paths") and isinstance(example.get("extent_m2"), (int, float))
+                    for example in damage_examples),
+            "labeled_examples": len(damage_examples),
+            "distinct_classes": sorted(damage_classes),
+            "detail": "Requires two measured, photographed damage examples from different classes.",
+        },
+    }
+    return {"ready": all(check["passed"] for check in checks.values()), "checks": checks}
 
 
 def _record_metric(rows: list[dict], *, tier: str, capture_id: str, room_id: str,
@@ -389,14 +482,14 @@ def evaluate(manifest_path: Path) -> dict:
         gates[f"{tier}_ceiling_height"] = {
             "within_1_5cm": sum(row["gate_pass"] is True for row in tier_rows),
             "rooms_scored": len(tier_rows),
-            "gate_pass": bool(tier_rows) and all(row["gate_pass"] is True for row in tier_rows),
+            "gate_pass": all(row["gate_pass"] is True for row in tier_rows) if tier_rows else None,
         }
     for tier, tolerance in (("photo", PHOTO_WALL_REL_TOLERANCE), ("video", VIDEO_WALL_REL_TOLERANCE)):
         wall_rows = [row for row in metric_rows if row["metric"] == "wall_length_m" and row["tier"] == tier]
         gates[f"{tier}_wall_lengths"] = {
             "within_tolerance": sum(row["gate_pass"] is True for row in wall_rows),
             "walls_scored": len(wall_rows), "relative_tolerance": tolerance,
-            "gate_pass": bool(wall_rows) and all(row["gate_pass"] is True for row in wall_rows),
+            "gate_pass": all(row["gate_pass"] is True for row in wall_rows) if wall_rows else None,
         }
     for tier in {item["tier"] for item in repeatability}:
         tier_items = [item for item in repeatability if item["tier"] == tier]
@@ -472,6 +565,7 @@ def evaluate(manifest_path: Path) -> dict:
         }
     return {
         "benchmark_id": manifest.get("benchmark_id", manifest_path.stem),
+        "benchmark_readiness": _benchmark_readiness(manifest),
         "metric_rows": metric_rows,
         "repeatability": repeatability,
         "photo_property_stitch": property_rows,
@@ -497,6 +591,10 @@ def main() -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(f"Benchmark report: {output}")
+    readiness = report["benchmark_readiness"]
+    print(f"Benchmark readiness: {'READY' if readiness['ready'] else 'INCOMPLETE'}")
+    for name, check in readiness["checks"].items():
+        print(f"readiness/{name}: {'PASS' if check['passed'] else 'INCOMPLETE'}")
     for name, gate in report["gates"].items():
         state = gate.get("gate_pass")
         print(f"{name}: {'PASS' if state is True else 'FAIL' if state is False else 'NOT SCORED'}")

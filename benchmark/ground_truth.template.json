@@ -2,7 +2,8 @@
   "benchmark_id": "property_01_2026-10",
   "property": {
     "footprint_m2": null,
-    "adjacency": []
+    "adjacency": [],
+    "connector_room_ids": ["C01"]
   },
   "ground_truth_rooms": [
     {
@@ -34,5 +35,6 @@
       "openings": []
     }
   ],
+  "staged_damage_examples": [],
   "runs": []
 }

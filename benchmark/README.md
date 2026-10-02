@@ -15,6 +15,8 @@ The benchmark needs measured truth and saved pipeline outputs. Do not guess valu
 - `walls`: one `{ "wall_id": "R01_W01", "length_m": 4.21 }` object per measured wall segment.
 - `openings`: one `{ "opening_id": "R01_D01", "width_m": 0.91 }` object per measured door/window.
 - `property.footprint_m2` and `property.adjacency`: measured whole-property area and edges such as `{ "room_a": "R01", "room_b": "C01" }`.
+- `property.connector_room_ids`: IDs of halls/connectors, such as `["C01"]`; these are excluded from the three-room minimum.
+- `staged_damage_examples`: at least two photographed and measured examples from distinct classes, e.g. `{ "example_id": "D01", "room_id": "R01", "surface_id": "R01_W02", "damage_class": "<case-study class>", "extent_m2": 0.12, "photo_paths": ["damage/D01.jpg"] }`.
 - `runs`: add an entry per capture with `result_json`, `tier`, and `room_id`. Result paths may be relative to the manifest. Add `repeat_group` for repeat captures.
 - `wall_matches`: map measured wall IDs to predicted `surface_id` values, for example `{ "ground_truth_wall_id": "R01_W01", "prediction_surface_id": "wall_1" }`.
 - `opening_matches`: map measured opening IDs to predicted `opening_id` values. Use a null `prediction_opening_id` for a missed opening. List every extra predicted opening in `phantom_opening_prediction_ids`.
@@ -30,4 +32,4 @@ From the repository root:
 python pipeline\evaluation\benchmark.py benchmark\ground_truth.json
 ```
 
-The evaluator writes `benchmark_report.json` next to the manifest and prints each scored gate. Errors identify missing result files, invalid tiers, or unknown room IDs. A successful report is not itself a pass: inspect each gate, metric row, missing prediction, and interval-coverage count.
+The evaluator writes `benchmark_report.json` next to the manifest and prints each scored gate plus a separate evidence-readiness checklist for the three-room set, measured truth, all-tier coverage, repeat capture, and staged damage. `NOT SCORED` means there are no comparable measurements for that gate; it is distinct from a measured `FAIL`. Errors identify missing result files, invalid tiers, or unknown room IDs. A successful report is not itself a pass: inspect each readiness check, scored gate, metric row, missing prediction, and interval-coverage count.
