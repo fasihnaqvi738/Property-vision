@@ -1,0 +1,17 @@
+{
+  "fix_id": "",
+  "target_gate": "",
+  "target_metric": "",
+  "direction": "higher_is_better",
+  "acceptance_threshold": null,
+  "root_cause_hypothesis": "",
+  "evidence_paths": [],
+  "proposed_fix": "",
+  "predicted_after_value": null,
+  "before_report": "",
+  "after_report": "",
+  "before_run_artifacts": [],
+  "after_run_artifacts": [],
+  "code_change_paths": [],
+  "regeneration_commands": []
+}

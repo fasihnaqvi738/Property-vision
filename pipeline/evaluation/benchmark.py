@@ -176,15 +176,108 @@ def _validate_manifest(manifest: dict, manifest_path: Path) -> None:
                         wall_ids = {str(wall.get("wall_id")) for wall in truth_room.get("walls", []) if isinstance(wall, dict)}
                         if str(match.get("ground_truth_wall_id")) not in wall_ids:
                             errors.append(f"{label}.{collection}[{match_index}].ground_truth_wall_id must match a wall in its room.")
+    incumbent = manifest.get("incumbent_comparison")
+    if incumbent is not None:
+        if not isinstance(incumbent, dict):
+            errors.append("incumbent_comparison must be an object or null.")
+        else:
+            if not isinstance(incumbent.get("app"), str) or not incumbent["app"].strip():
+                errors.append("incumbent_comparison.app must be a non-empty string.")
+            if not isinstance(incumbent.get("version"), str) or not incumbent["version"].strip():
+                errors.append("incumbent_comparison.version must be a non-empty string.")
+            artifacts = incumbent.get("source_artifacts")
+            if not isinstance(artifacts, list) or not artifacts:
+                errors.append("incumbent_comparison.source_artifacts must list the saved app exports.")
+            elif any(not isinstance(path, str) or not path.strip() for path in artifacts):
+                errors.append("incumbent_comparison.source_artifacts entries must be non-empty paths.")
+            else:
+                for artifact in artifacts:
+                    if not _result_path(manifest_path, artifact).is_file():
+                        errors.append(f"incumbent comparison artifact was not found: {_result_path(manifest_path, artifact)}")
+            comparison_rooms = incumbent.get("rooms")
+            if not isinstance(comparison_rooms, list):
+                errors.append("incumbent_comparison.rooms must be an array.")
+            else:
+                seen_comparison_rooms = set()
+                for index, comparison_room in enumerate(comparison_rooms):
+                    label = f"incumbent_comparison.rooms[{index}]"
+                    if not isinstance(comparison_room, dict):
+                        errors.append(f"{label} must be an object.")
+                        continue
+                    room_id = comparison_room.get("room_id")
+                    if not isinstance(room_id, str) or room_id not in room_ids:
+                        errors.append(f"{label}.room_id must match a declared ground-truth room.")
+                    elif room_id in seen_comparison_rooms:
+                        errors.append(f"Duplicate room in incumbent comparison: {room_id}.")
+                    else:
+                        seen_comparison_rooms.add(room_id)
+                    capture_id = comparison_room.get("capture_id")
+                    if not isinstance(capture_id, str) or not capture_id.strip():
+                        errors.append(f"{label}.capture_id must identify the matching LiDAR pipeline run.")
+                    elif not any(
+                        isinstance(run, dict) and run.get("tier") == "lidar"
+                        and str(run.get("room_id")) == room_id
+                        and run.get("capture_id") == capture_id
+                        for run in runs
+                    ):
+                        errors.append(f"{label}.capture_id must match a LiDAR run with an explicit capture_id for {room_id}.")
+                    for key in ("ceiling_height_m", "floor_area_m2"):
+                        value = comparison_room.get(key)
+                        if value is not None and (
+                            not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0
+                        ):
+                            errors.append(f"{label}.{key} must be a positive number or null.")
+                    for collection, id_key, value_key in (
+                        ("walls", "wall_id", "length_m"),
+                        ("openings", "opening_id", "width_m"),
+                    ):
+                        items = comparison_room.get(collection, [])
+                        if not isinstance(items, list):
+                            errors.append(f"{label}.{collection} must be an array.")
+                            continue
+                        seen_ids = set()
+                        for item_index, item in enumerate(items):
+                            item_label = f"{label}.{collection}[{item_index}]"
+                            if not isinstance(item, dict):
+                                errors.append(f"{item_label} must be an object.")
+                                continue
+                            item_id, value = item.get(id_key), item.get(value_key)
+                            if not isinstance(item_id, str) or not item_id.strip():
+                                errors.append(f"{item_label}.{id_key} must be a non-empty string.")
+                            elif item_id in seen_ids:
+                                errors.append(f"Duplicate {id_key} in {label}: {item_id}.")
+                            else:
+                                seen_ids.add(item_id)
+                            if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0:
+                                errors.append(f"{item_label}.{value_key} must be a positive number.")
+                            truth_room = next(
+                                (item for item in rooms if isinstance(item, dict) and item.get("room_id") == room_id),
+                                {},
+                            )
+                            truth_ids = {
+                                str(truth_item.get("wall_id" if collection == "walls" else "opening_id"))
+                                for truth_item in truth_room.get(collection, [])
+                                if isinstance(truth_item, dict)
+                            }
+                            if isinstance(item_id, str) and item_id not in truth_ids:
+                                errors.append(f"{item_label}.{id_key} must match a ground-truth object in {room_id}.")
     damage_examples = manifest.get("staged_damage_examples", [])
     if not isinstance(damage_examples, list):
         errors.append("staged_damage_examples must be an array.")
     else:
+        damage_example_ids = set()
         for index, example in enumerate(damage_examples):
             label = f"staged_damage_examples[{index}]"
             if not isinstance(example, dict):
                 errors.append(f"{label} must be an object.")
                 continue
+            example_id = example.get("example_id")
+            if not isinstance(example_id, str) or not example_id.strip():
+                errors.append(f"{label}.example_id must be a non-empty string.")
+            elif example_id in damage_example_ids:
+                errors.append(f"Duplicate staged damage example_id: {example_id}.")
+            else:
+                damage_example_ids.add(example_id)
             if not isinstance(example.get("room_id"), str) or example["room_id"] not in room_ids:
                 errors.append(f"{label}.room_id must match a declared room_id.")
             if not isinstance(example.get("damage_class"), str) or not example["damage_class"].strip():
@@ -201,15 +294,18 @@ def _validate_manifest(manifest: dict, manifest_path: Path) -> None:
                 for region_index, region in enumerate(regions):
                     region_label = f"{label}.regions[{region_index}]"
                     polygon = region.get("polygon_px") if isinstance(region, dict) else None
-                    if not isinstance(region, dict) or not isinstance(region.get("image_path"), str):
+                    if not isinstance(region, dict) or not isinstance(region.get("image_path"), str) or not region["image_path"].strip():
                         errors.append(f"{region_label} must include image_path and polygon_px.")
                         continue
+                    image_path = _result_path(manifest_path, region["image_path"])
+                    if not image_path.is_file():
+                        errors.append(f"{region_label}.image_path was not found: {image_path}")
                     if not isinstance(polygon, list) or len(polygon) < 3 or any(
                         not isinstance(point, list) or len(point) != 2
-                        or any(not isinstance(value, (int, float)) or isinstance(value, bool) for value in point)
+                        or any(not isinstance(value, (int, float)) or isinstance(value, bool) or value < 0 for value in point)
                         for point in polygon
                     ):
-                        errors.append(f"{region_label}.polygon_px must have at least three [x, y] pixel points.")
+                        errors.append(f"{region_label}.polygon_px must have at least three non-negative [x, y] pixel points.")
     if errors:
         raise ValueError("Invalid benchmark manifest:\n- " + "\n- ".join(errors))
 
@@ -331,6 +427,110 @@ def _record_metric(rows: list[dict], *, tier: str, capture_id: str, room_id: str
     return row
 
 
+def _compare_incumbent(manifest: dict, metric_rows: list[dict]) -> dict:
+    """Compare LiDAR errors with a saved consumer-app export on shared dimensions."""
+    comparison = manifest.get("incumbent_comparison")
+    if not isinstance(comparison, dict):
+        return {
+            "status": "not_provided",
+            "app": None,
+            "version": None,
+            "required_room_count": 2,
+            "compared_room_count": 0,
+            "compared_dimension_count": 0,
+            "wins": 0,
+            "ties": 0,
+            "losses": 0,
+            "win_or_tie_rate": None,
+            "required_rate": 0.70,
+            "gate_pass": None,
+            "rows": [],
+        }
+
+    pipeline_rows = {
+        (row["room_id"], row["capture_id"], row["metric"], row["object_id"]): row
+        for row in metric_rows if row["tier"] == "lidar"
+    }
+    score_rows = []
+    for room in comparison.get("rooms", []):
+        room_id = str(room.get("room_id", ""))
+        capture_id = str(room.get("capture_id", ""))
+        measurements = []
+        for key, metric, object_id in (
+            ("ceiling_height_m", "ceiling_height_m", room_id),
+            ("floor_area_m2", "floor_area_m2", room_id),
+        ):
+            value = room.get(key)
+            if value is not None:
+                measurements.append((metric, object_id, float(value)))
+        for item in room.get("walls", []):
+            measurements.append(("wall_length_m", str(item["wall_id"]), float(item["length_m"])))
+        for item in room.get("openings", []):
+            measurements.append(("opening_width_m", str(item["opening_id"]), float(item["width_m"])))
+
+        for metric, object_id, incumbent_value in measurements:
+            pipeline_row = pipeline_rows.get((room_id, capture_id, metric, object_id))
+            product_value = pipeline_row.get("prediction") if pipeline_row else None
+            ground_truth = pipeline_row.get("ground_truth") if pipeline_row else None
+            product_error = (
+                abs(float(product_value) - float(ground_truth))
+                if isinstance(product_value, (int, float)) and isinstance(ground_truth, (int, float))
+                else None
+            )
+            incumbent_error = (
+                abs(incumbent_value - float(ground_truth))
+                if isinstance(ground_truth, (int, float)) else None
+            )
+            outcome = "not_comparable"
+            if product_error is not None and incumbent_error is not None:
+                tie_tolerance = max(1e-6, abs(float(ground_truth)) * 1e-6)
+                if abs(product_error - incumbent_error) <= tie_tolerance:
+                    outcome = "tie"
+                elif product_error < incumbent_error:
+                    outcome = "property_vision_win"
+                else:
+                    outcome = "property_vision_loss"
+            score_rows.append({
+                "room_id": room_id,
+                "capture_id": capture_id,
+                "metric": metric,
+                "object_id": object_id,
+                "ground_truth": ground_truth,
+                "property_vision_prediction": product_value,
+                "property_vision_absolute_error": product_error,
+                "incumbent_prediction": incumbent_value,
+                "incumbent_absolute_error": incumbent_error,
+                "outcome": outcome,
+            })
+
+    compared = [row for row in score_rows if row["outcome"] != "not_comparable"]
+    wins = sum(row["outcome"] == "property_vision_win" for row in compared)
+    ties = sum(row["outcome"] == "tie" for row in compared)
+    losses = sum(row["outcome"] == "property_vision_loss" for row in compared)
+    compared_rooms = {row["room_id"] for row in compared}
+    rate = (wins + ties) / len(compared) if compared else None
+    enough_rooms = len(compared_rooms) >= 2
+    gate_pass = (rate >= 0.70 and enough_rooms) if rate is not None else None
+    status = "not_scored" if not compared else "scored" if enough_rooms else "incomplete"
+    return {
+        "status": status,
+        "app": comparison.get("app"),
+        "version": comparison.get("version"),
+        "required_room_count": 2,
+        "compared_room_count": len(compared_rooms),
+        "compared_dimension_count": len(compared),
+        "wins": wins,
+        "ties": ties,
+        "losses": losses,
+        "not_comparable_count": len(score_rows) - len(compared),
+        "win_or_tie_rate": rate,
+        "required_rate": 0.70,
+        "gate_pass": gate_pass,
+        "source_artifacts": comparison.get("source_artifacts", []),
+        "rows": score_rows,
+    }
+
+
 def evaluate(manifest_path: Path) -> dict:
     manifest_path = manifest_path.resolve()
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -345,6 +545,7 @@ def evaluate(manifest_path: Path) -> dict:
     video_footprint_rows = []
     candidate_area_rows = []
     candidate_wall_rows = []
+    runtime_rows = []
 
     loaded_runs = []
     for run in runs:
@@ -355,11 +556,26 @@ def evaluate(manifest_path: Path) -> dict:
         tier = run["tier"]
         capture_id = run.get("capture_id", result.get("capture", {}).get("capture_id", result_path.stem))
         gt_room_id = str(run["room_id"])
+        reconstruction = result.get("reconstruction")
+        summary = reconstruction.get("summary", {}) if isinstance(reconstruction, dict) else {}
+        runtime = summary.get("processing_runtime_seconds") if isinstance(summary, dict) else None
+        valid_runtime = (
+            float(runtime) if isinstance(runtime, (int, float)) and not isinstance(runtime, bool)
+            and runtime >= 0 else None
+        )
+        runtime_rows.append({
+            "tier": tier,
+            "capture_id": str(capture_id),
+            "room_id": gt_room_id,
+            "result_json": str(result_path),
+            "runtime_seconds": valid_runtime,
+            "under_15_minutes": valid_runtime <= 900 if valid_runtime is not None else None,
+        })
         gt_room = rooms[gt_room_id]
         result_rooms = _index(result.get("property_plan", {}).get("rooms", []), "room_id")
         predicted_room_id = str(run.get("prediction_room_id", gt_room_id))
         predicted_room = result_rooms.get(predicted_room_id, {})
-        loaded = {"run": run, "result": result, "gt_room": gt_room,
+        loaded = {"run": run, "result": result, "result_path": result_path, "gt_room": gt_room,
                   "predicted_room": predicted_room, "tier": tier,
                   "capture_id": str(capture_id), "room_id": gt_room_id}
         loaded_runs.append(loaded)
@@ -679,22 +895,57 @@ def evaluate(manifest_path: Path) -> dict:
                 if video_footprint_interval_values else None
             ),
         }
+    incumbent_report = _compare_incumbent(manifest, metric_rows)
+    gates["lidar_incumbent_comparison"] = {
+        "compared_rooms": incumbent_report["compared_room_count"],
+        "compared_dimensions": incumbent_report["compared_dimension_count"],
+        "win_or_tie_rate": incumbent_report["win_or_tie_rate"],
+        "required_rate": incumbent_report["required_rate"],
+        "gate_pass": incumbent_report["gate_pass"],
+    }
+    runtime_measured = [row for row in runtime_rows if row["runtime_seconds"] is not None]
+    runtime_complete = len(runtime_measured) == len(runtime_rows)
+    runtime_pass = (
+        all(row["under_15_minutes"] is True for row in runtime_measured)
+        if runtime_complete and runtime_measured else None
+    )
+    gates["single_command_runtime_under_15_minutes"] = {
+        "runs_declared": len(runtime_rows),
+        "runs_with_runtime": len(runtime_measured),
+        "runs_under_15_minutes": sum(row["under_15_minutes"] is True for row in runtime_measured),
+        "threshold_seconds": 900,
+        "gate_pass": runtime_pass,
+        "clean_machine_verified": False,
+        "detail": "This measures saved local run times; repeat on a clean machine to satisfy the environment part of the requirement.",
+    }
     return {
         "benchmark_id": manifest.get("benchmark_id", manifest_path.stem),
         "benchmark_readiness": _benchmark_readiness(manifest),
+        "run_provenance": [
+            {
+                "tier": item["tier"],
+                "capture_id": item["capture_id"],
+                "room_id": item["room_id"],
+                "repeat_group": item["run"].get("repeat_group"),
+                "result_json": str(item["result_path"]),
+            }
+            for item in loaded_runs
+        ],
         "metric_rows": metric_rows,
         "diagnostic_boundary_candidate_area_rows": candidate_area_rows,
         "diagnostic_boundary_candidate_wall_rows": candidate_wall_rows,
         "repeatability": repeatability,
         "photo_property_stitch": property_rows,
         "video_property_footprint": video_footprint_rows,
+        "runtime_rows": runtime_rows,
+        "lidar_incumbent_comparison": incumbent_report,
         "gates": gates,
         "interval_calibration": calibration_summary,
         "limitations": [
             "Only explicitly mapped ground-truth objects are compared; reviewer mapping quality matters.",
             "Missing or unavailable product measurements fail applicable gates and remain visible in metric_rows.",
             "Interval coverage is empirical and cannot establish calibration with a small sample set.",
-            "Timing, drift ablation, and incumbent comparison require separate evidence and are not inferred here.",
+            "Timing and drift ablation require separate evidence and are not inferred from measurement scores.",
         ],
     }
 
@@ -716,6 +967,12 @@ def main() -> None:
     for name, gate in report["gates"].items():
         state = gate.get("gate_pass")
         print(f"{name}: {'PASS' if state is True else 'FAIL' if state is False else 'NOT SCORED'}")
+    comparison = report["lidar_incumbent_comparison"]
+    if comparison["status"] != "not_provided":
+        print(
+            f"LiDAR incumbent comparison: {comparison['wins']} wins, {comparison['ties']} ties, "
+            f"{comparison['losses']} losses across {comparison['compared_dimension_count']} shared dimensions."
+        )
 
 
 if __name__ == "__main__":

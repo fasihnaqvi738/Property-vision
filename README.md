@@ -107,6 +107,30 @@ The repeatable field procedure for matching room IDs across photo, video, LiDAR,
 
 ## Ground-truth benchmark scoring
 
+### Supplied dimensioned apartment plan
+
+When a builder supplies a floor-plan image with metric labels, keep it as a separate reference artifact. Create a reviewed annotation JSON containing image-coordinate room/connector outlines, transcribed dimensions, and adjacency; then render and check it with:
+
+```powershell
+python -m pipeline.geometry.render_reference_plan "captures\apartment_case_01\reference_plan.json" "outputs\apartment_case_01\stitched_plan"
+```
+
+The command writes an SVG overlay, PNG preview, GeoJSON, and a validation report. It rejects out-of-image or degenerate polygons and reports overlap intersections. Source-plan dimensions remain drawing references; image-pixel polygons are not converted to metres unless the drawing is independently calibrated. This is a human-reviewed floor-plan baseline, not a plan inferred from the photo/video reconstruction. Opening widths and missing measurement references stay unavailable.
+
+For an edited single walkthrough, a reviewed `video_room_segments.json` can identify the time span for each room. The `--video-segments-json` option creates room-specific clips and processes them through the same multi-room video tier in one command:
+
+```powershell
+python main.py "captures\apartment_case_01\apartment_video.mp4" --video-segments-json "captures\apartment_case_01\video_room_segments.json"
+```
+
+The interval labels are human matches to supplied stills; the promotional video has edits and overlays. The multi-room video result records each clip interval and its reconstruction separately, and continues if an individual room fails. These per-room models remain arbitrary-scale and do not establish a stitched layout; use the separately rendered drawing as the current layout reference.
+
+After photo and video runs, combine their recorded reconstruction coverage with the traced plan and explicit benchmark gaps using:
+
+```powershell
+python -m pipeline.evaluation.summarize_case_evidence "captures\apartment_case_01\reference_plan.json" "outputs\<photo-run>\result.json" "outputs\<video-run>\result.json" "outputs\apartment_case_01\evidence_report.json"
+```
+
 The currently available public/sample assets and their limits are listed in [`docs/public_dataset_inventory.md`](docs/public_dataset_inventory.md). The supplied RGB-D clip can generate same-scene photo input frames, but the tested sampled sets did not give COLMAP a valid initial image pair. The independent ISPRS still-photo sample does reconstruct as a single-room smoke test. Neither is independent iPhone multi-room benchmark evidence.
 
 `pipeline/evaluation/benchmark.py` scores saved `result.json` files against a manually measured manifest. Follow [`benchmark/README.md`](benchmark/README.md), then copy `benchmark/ground_truth.template.json` to `benchmark/ground_truth.json`; the template has the required three-room-plus-connector structure but still needs measured values and capture runs. Record room areas, ceiling heights, wall lengths, opening widths, multi-room footprint/adjacency, and each run's result path. Add reviewed ID correspondences in each run's `wall_matches` and `opening_matches`. Record missed openings with a `null` prediction ID and every phantom opening in `phantom_opening_prediction_ids` so both count as detection errors. Reuse a `repeat_group` for captures of the same room and tier.

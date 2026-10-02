@@ -1,3 +1,5 @@
+import shutil
+import tempfile
 from pathlib import Path
 
 import pycolmap
@@ -48,31 +50,39 @@ def reconstruct_from_images(
     if max_num_features is not None:
         extraction_options.sift.max_num_features = int(max_num_features)
 
-    pycolmap.extract_features(
-        database_path,
-        image_dir,
-        extraction_options=extraction_options,
-    )
-    if matching_strategy == "exhaustive":
-        pycolmap.match_exhaustive(database_path, matching_options=matching_options)
-    elif matching_strategy == "sequential":
-        pairing_options = pycolmap.SequentialPairingOptions()
-        pairing_options.overlap = int(sequential_overlap)
-        pairing_options.quadratic_overlap = False
-        if num_threads is not None:
-            pairing_options.num_threads = int(num_threads)
-        pycolmap.match_sequential(
+    # COLMAP scans every file in the supplied directory. Stage only supported
+    # image inputs so sidecars (for example photo-proxy provenance JSON) are
+    # not treated as images and warned about during feature extraction.
+    with tempfile.TemporaryDirectory(prefix="property_vision_images_") as staging:
+        staged_image_dir = Path(staging)
+        for image_path in image_files:
+            shutil.copy2(image_path, staged_image_dir / image_path.name)
+
+        pycolmap.extract_features(
             database_path,
-            matching_options=matching_options,
-            pairing_options=pairing_options,
+            staged_image_dir,
+            extraction_options=extraction_options,
         )
-    else:
-        raise ValueError("matching_strategy must be 'exhaustive' or 'sequential'.")
-    reconstructions = pycolmap.incremental_mapping(
-        database_path,
-        image_dir,
-        sparse_path,
-    )
+        if matching_strategy == "exhaustive":
+            pycolmap.match_exhaustive(database_path, matching_options=matching_options)
+        elif matching_strategy == "sequential":
+            pairing_options = pycolmap.SequentialPairingOptions()
+            pairing_options.overlap = int(sequential_overlap)
+            pairing_options.quadratic_overlap = False
+            if num_threads is not None:
+                pairing_options.num_threads = int(num_threads)
+            pycolmap.match_sequential(
+                database_path,
+                matching_options=matching_options,
+                pairing_options=pairing_options,
+            )
+        else:
+            raise ValueError("matching_strategy must be 'exhaustive' or 'sequential'.")
+        reconstructions = pycolmap.incremental_mapping(
+            database_path,
+            staged_image_dir,
+            sparse_path,
+        )
 
     if not reconstructions:
         raise RuntimeError(

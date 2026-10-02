@@ -217,27 +217,53 @@ def run_pipeline(input_path: str, output_root: str = "outputs", *, pose_mode: st
                 contact_sheets = []
                 for room_id, room_video in room_inputs:
                     room_dir = run_dir / "room_videos" / room_id
-                    sampling = sample_walkthrough_video(room_video, room_dir)
-                    models = reconstruct_from_images(
-                        room_dir / sampling["frame_directory"],
-                        run_dir / "reconstruction" / room_id,
-                        **reconstruction_settings,
+                    segment_sidecar = room_video.parent / "video_segment.json"
+                    source_segment = (
+                        json.loads(segment_sidecar.read_text(encoding="utf-8"))
+                        if segment_sidecar.is_file() else None
                     )
+                    room_error = None
+                    sampling = None
+                    models = []
+                    try:
+                        sampling = sample_walkthrough_video(
+                            room_video, room_dir, sample_fps=1.5, max_frames=60
+                        )
+                        models = reconstruct_from_images(
+                            room_dir / sampling["frame_directory"],
+                            run_dir / "reconstruction" / room_id,
+                            **reconstruction_settings,
+                        )
+                    except (RuntimeError, ValueError, OSError) as error:
+                        # Preserve other room runs when one short or edited interval
+                        # cannot be decoded, sampled, or reconstructed.
+                        room_error = str(error)
                     primary = max(
                         models,
                         key=lambda model: (model["registered_images"], model["sparse_points"]),
                         default=None,
                     )
-                    room_summaries.append({
+                    room_summary = {
                         "room_id": room_id,
                         "source_video": room_video.relative_to(capture.path).as_posix(),
                         "sampling": sampling,
                         "models": models,
                         "primary_model_id": primary["model_id"] if primary else None,
-                        "video_reconstruction_quality": _video_reconstruction_quality(sampling, models),
-                    })
+                        "video_reconstruction_quality": (
+                            _video_reconstruction_quality(sampling, models)
+                            if sampling is not None else {
+                                "status": "failed", "sampled_frame_count": 0,
+                                "model_count": 0, "largest_model_registered_frames": 0,
+                            }
+                        ),
+                        "failure_reason": room_error,
+                    }
+                    if source_segment is not None:
+                        room_summary["source_segment"] = source_segment
+                    room_summaries.append(room_summary)
                     plan_rooms.append(_unavailable_room_plan(room_id))
-                    contact_sheets.append(str(room_dir / sampling["contact_sheet"]))
+                    if sampling is not None:
+                        contact_sheets.append(str(room_dir / sampling["contact_sheet"]))
 
                 result = build_result(
                     capture_id=capture.path.name,

@@ -218,24 +218,36 @@ def _read_synchronized_rgb_frames(
     return resized_rgb, sync
 
 
-def _polycam_directories(capture_path: Path) -> tuple[Path, Path, Path, bool]:
+def _polycam_directories(
+    capture_path: Path, pose_mode: str = "auto",
+) -> tuple[Path, Path, Path, str]:
     keyframes = capture_path / "keyframes"
-    corrected_images = keyframes / "corrected_images"
-    corrected_cameras = keyframes / "corrected_cameras"
-    use_corrected = corrected_images.is_dir() and corrected_cameras.is_dir()
-    image_dir = corrected_images if use_corrected else keyframes / "images"
-    camera_dir = corrected_cameras if use_corrected else keyframes / "cameras"
+    variants = {
+        "raw": (keyframes / "images", keyframes / "cameras"),
+        "optimized": (keyframes / "corrected_images", keyframes / "corrected_cameras"),
+    }
+    if pose_mode not in {"auto", "raw", "optimized"}:
+        raise ValueError("pose_mode must be auto, raw, or optimized.")
+    selected_mode = pose_mode
+    if pose_mode == "auto":
+        selected_mode = "optimized" if all(path.is_dir() for path in variants["optimized"]) else "raw"
+    image_dir, camera_dir = variants[selected_mode]
     depth_dir = keyframes / "depth"
     if not all(directory.is_dir() for directory in (depth_dir, image_dir, camera_dir)):
-        raise ValueError(
-            "Polycam raw capture needs keyframes/depth plus matching images and cameras "
-            "(or corrected_images and corrected_cameras) directories."
-        )
-    return depth_dir, image_dir, camera_dir, use_corrected
+        if pose_mode == "auto":
+            selected_mode = "raw" if selected_mode == "optimized" else "optimized"
+            image_dir, camera_dir = variants[selected_mode]
+        if not all(directory.is_dir() for directory in (depth_dir, image_dir, camera_dir)):
+            raise ValueError(
+                f"Polycam {pose_mode} pose mode requires matching keyframes/{image_dir.name}/ "
+                f"and keyframes/{camera_dir.name}/ directories plus keyframes/depth/."
+            )
+    return depth_dir, image_dir, camera_dir, selected_mode
 
 
 def _read_polycam_rgb_frames(
     image_dir: Path, target_ids: list[str], depth_width: int, depth_height: int,
+    pose_mode: str,
 ) -> tuple[dict[str, np.ndarray], dict]:
     image_files = {
         path.stem: path for path in image_dir.iterdir()
@@ -265,7 +277,7 @@ def _read_polycam_rgb_frames(
         "rgb_image_dimensions": source_dimensions,
         "depth_dimensions": [depth_width, depth_height],
         "temporal_match_method": "Exact shared keyframe timestamp in RGB, depth, and camera filenames.",
-        "pose_variant": "corrected" if "corrected_" in image_dir.name else "original",
+        "pose_variant": pose_mode,
     }
 
 
@@ -288,13 +300,14 @@ def _write_ascii_ply(path: Path, points: np.ndarray, colors: np.ndarray) -> None
         np.savetxt(handle, vertices, fmt="%.6f %.6f %.6f %d %d %d")
 
 
-def reconstruct_rgbd(capture_path: Path, output_dir: Path) -> dict:
+def reconstruct_rgbd(capture_path: Path, output_dir: Path, *, pose_mode: str = "auto") -> dict:
     """Back-project sparse depth samples from the supplied or Polycam RGB-D tier."""
     capture_path = Path(capture_path)
     output_dir.mkdir(parents=True, exist_ok=True)
     polycam = (capture_path / "keyframes" / "depth").is_dir()
+    selected_pose_mode = "supplied"
     if polycam:
-        depth_dir, image_dir, camera_dir, corrected_poses = _polycam_directories(capture_path)
+        depth_dir, image_dir, camera_dir, selected_pose_mode = _polycam_directories(capture_path, pose_mode)
         confidence_dir = capture_path / "keyframes" / "confidence"
         depth_files = {p.stem: p for p in depth_dir.glob("*.png")}
         camera_files = {p.stem: p for p in camera_dir.glob("*.json")}
@@ -319,6 +332,8 @@ def reconstruct_rgbd(capture_path: Path, output_dir: Path) -> dict:
         rows_by_frame = {row["frame"].strip(): row for row in rows}
         frame_ids = sorted(set(depth_files) & set(rows_by_frame), key=_numeric_frame_sort)
         source_format = "rgbd_bundle"
+        if pose_mode != "auto":
+            raise ValueError("--pose-mode raw/optimized applies only to Polycam LiDAR exports.")
 
     if not frame_ids:
         raise ValueError("No depth PNG frame IDs match camera pose records.")
@@ -333,7 +348,7 @@ def reconstruct_rgbd(capture_path: Path, output_dir: Path) -> dict:
     depth_height, depth_width = first_depth.shape
     if polycam:
         rgb_frames, video_sync = _read_polycam_rgb_frames(
-            image_dir, sampled_frame_ids, depth_width, depth_height
+            image_dir, sampled_frame_ids, depth_width, depth_height, selected_pose_mode
         )
     else:
         rgb_frames, video_sync = _read_synchronized_rgb_frames(
@@ -462,13 +477,14 @@ def reconstruct_rgbd(capture_path: Path, output_dir: Path) -> dict:
     manifest = {
         "format_version": 1,
         "capture_type": source_format,
+        "pose_mode": selected_pose_mode,
         "frames_available": len(frame_ids),
         "frames_sampled": processed,
         "frame_stride": frame_stride,
         "pixel_stride": pixel_stride,
         "point_count": int(len(points)),
         "colorization": {
-            "source": "rgb.mp4",
+            "source": "keyframe images" if polycam else "rgb.mp4",
             "status": "colored",
             "pixel_alignment_assumption": "RGB and depth are registered to the same camera view; RGB is resized to the depth raster before per-pixel color lookup.",
             "synchronization": video_sync,
@@ -481,7 +497,7 @@ def reconstruct_rgbd(capture_path: Path, output_dir: Path) -> dict:
         ),
         "camera_intrinsics": "Per-frame RGB-camera intrinsics scaled to the matching depth raster dimensions.",
         "pose_convention_assumption": (
-            "Polycam row-major camera-to-world pose; ARKit axes (+Y up, -Z forward) converted from CV back-projection axes."
+            f"Polycam {selected_pose_mode} row-major camera-to-world pose; ARKit axes (+Y up, -Z forward) converted from CV back-projection axes."
             if polycam else
             "CSV quaternion (qx,qy,qz,qw) and translation interpreted as camera-to-world, using standard right-handed quaternion rotation."
         ),
