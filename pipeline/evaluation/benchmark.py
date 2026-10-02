@@ -147,21 +147,35 @@ def _validate_manifest(manifest: dict, manifest_path: Path) -> None:
         candidate_matches = run.get("boundary_hypothesis_matches", [])
         if not isinstance(candidate_matches, list):
             errors.append(f"{label}.boundary_hypothesis_matches must be an array.")
+        side_matches = run.get("boundary_side_matches", [])
+        if not isinstance(side_matches, list):
+            errors.append(f"{label}.boundary_side_matches must be an array.")
         if "phantom_opening_prediction_ids" in run and not isinstance(run["phantom_opening_prediction_ids"], list):
             errors.append(f"{label}.phantom_opening_prediction_ids must be an array.")
         if "room_matches" in run and not isinstance(run["room_matches"], dict):
             errors.append(f"{label}.room_matches must be an object.")
         for collection, keys in (("wall_matches", ("ground_truth_wall_id", "prediction_surface_id")),
                                  ("opening_matches", ("ground_truth_opening_id", "prediction_opening_id")),
-                                 ("boundary_hypothesis_matches", ("ground_truth_room_id", "prediction_candidate_id"))):
+                                 ("boundary_hypothesis_matches", ("ground_truth_room_id", "prediction_candidate_id")),
+                                 ("boundary_side_matches", ("ground_truth_room_id", "ground_truth_wall_id", "prediction_candidate_id", "candidate_side_index"))):
             matches = run.get(collection, [])
             if not isinstance(matches, list):
                 continue
             for match_index, match in enumerate(matches):
-                if not isinstance(match, dict) or keys[0] not in match or keys[1] not in match:
-                    errors.append(f"{label}.{collection}[{match_index}] must include {keys[0]} and {keys[1]}.")
-                elif collection == "boundary_hypothesis_matches" and str(match[keys[0]]) not in room_ids:
-                    errors.append(f"{label}.{collection}[{match_index}].{keys[0]} must match a declared room_id.")
+                if not isinstance(match, dict) or any(key not in match for key in keys):
+                    errors.append(f"{label}.{collection}[{match_index}] must include {', '.join(keys)}.")
+                else:
+                    truth_room_id = str(match.get("ground_truth_room_id", ""))
+                    if collection in {"boundary_hypothesis_matches", "boundary_side_matches"} and truth_room_id not in room_ids:
+                        errors.append(f"{label}.{collection}[{match_index}].ground_truth_room_id must match a declared room_id.")
+                    if collection == "boundary_side_matches":
+                        side_index = match.get("candidate_side_index")
+                        if not isinstance(side_index, int) or isinstance(side_index, bool) or side_index < 0:
+                            errors.append(f"{label}.{collection}[{match_index}].candidate_side_index must be a non-negative integer.")
+                        truth_room = next((room for room in rooms if isinstance(room, dict) and room.get("room_id") == truth_room_id), {})
+                        wall_ids = {str(wall.get("wall_id")) for wall in truth_room.get("walls", []) if isinstance(wall, dict)}
+                        if str(match.get("ground_truth_wall_id")) not in wall_ids:
+                            errors.append(f"{label}.{collection}[{match_index}].ground_truth_wall_id must match a wall in its room.")
     damage_examples = manifest.get("staged_damage_examples", [])
     if not isinstance(damage_examples, list):
         errors.append("staged_damage_examples must be an array.")
@@ -297,6 +311,7 @@ def evaluate(manifest_path: Path) -> dict:
     property_rows = []
     video_footprint_rows = []
     candidate_area_rows = []
+    candidate_wall_rows = []
 
     loaded_runs = []
     for run in runs:
@@ -341,6 +356,39 @@ def evaluate(manifest_path: Path) -> dict:
                     "absolute_error_m2": error,
                     "relative_error": error / abs(float(ground_truth_area)) if ground_truth_area else None,
                     "accepted_room_measurement": False,
+                    "gate_pass": None,
+                })
+        for match in run.get("boundary_side_matches", []):
+            truth_room_id = str(match["ground_truth_room_id"])
+            truth_room = rooms[truth_room_id]
+            truth_wall_id = str(match["ground_truth_wall_id"])
+            truth_wall = _index(truth_room.get("walls", []), "wall_id").get(truth_wall_id)
+            candidate_id = str(match["prediction_candidate_id"])
+            candidate = candidate_index.get(candidate_id)
+            if candidate is None:
+                raise ValueError(f"Boundary hypothesis {candidate_id!r} was not found in {result_path}.")
+            side_index = match["candidate_side_index"]
+            side_lengths = candidate.get("side_lengths_m", [])
+            if side_index >= len(side_lengths):
+                raise ValueError(
+                    f"Candidate side index {side_index} is out of range for hypothesis {candidate_id!r} in {result_path}."
+                )
+            predicted_length = side_lengths[side_index]
+            truth_length = truth_wall.get("length_m") if truth_wall else None
+            if isinstance(truth_length, (int, float)) and isinstance(predicted_length, (int, float)):
+                error = abs(float(predicted_length) - float(truth_length))
+                candidate_wall_rows.append({
+                    "tier": tier,
+                    "capture_id": str(capture_id),
+                    "room_id": truth_room_id,
+                    "ground_truth_wall_id": truth_wall_id,
+                    "candidate_id": candidate_id,
+                    "candidate_side_index": side_index,
+                    "ground_truth_length_m": float(truth_length),
+                    "diagnostic_candidate_length_m": float(predicted_length),
+                    "absolute_error_m": error,
+                    "relative_error": error / abs(float(truth_length)) if truth_length else None,
+                    "accepted_wall_measurement": False,
                     "gate_pass": None,
                 })
 
@@ -603,6 +651,7 @@ def evaluate(manifest_path: Path) -> dict:
         "benchmark_readiness": _benchmark_readiness(manifest),
         "metric_rows": metric_rows,
         "diagnostic_boundary_candidate_area_rows": candidate_area_rows,
+        "diagnostic_boundary_candidate_wall_rows": candidate_wall_rows,
         "repeatability": repeatability,
         "photo_property_stitch": property_rows,
         "video_property_footprint": video_footprint_rows,
