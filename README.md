@@ -72,6 +72,8 @@ python -m pipeline.validation outputs\some_run\result.json
 
 Until room extraction and calibration are implemented, unsupported plan and measurement fields are explicitly marked unavailable. The requirement-by-requirement status is tracked in `docs/compliance_matrix.md`.
 
+The repeatable field procedure for matching room IDs across photo, video, LiDAR, staged-damage, and ground-truth captures is in [`docs/capture_protocol.md`](docs/capture_protocol.md). Polycam raw-data ZIPs described there need an ingestion adapter before this pipeline can process them.
+
 ## Ground-truth benchmark scoring
 
 `pipeline/evaluation/benchmark.py` scores saved `result.json` files against a manually measured manifest. Start from `benchmark/ground_truth.template.json`; record room areas, ceiling heights, wall lengths, opening widths, multi-room footprint/adjacency, and each run's result path. Add reviewed ID correspondences in each run's `wall_matches` and `opening_matches`. Record missed openings with a `null` prediction ID and every phantom opening in `phantom_opening_prediction_ids` so both count as detection errors. Reuse a `repeat_group` for captures of the same room and tier.
