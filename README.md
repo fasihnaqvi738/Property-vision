@@ -80,7 +80,7 @@ python -m pipeline.validation outputs\some_run\result.json
 
 Until room extraction and calibration are implemented, unsupported plan and measurement fields are explicitly marked unavailable. The requirement-by-requirement status is tracked in `docs/compliance_matrix.md`.
 
-The repeatable field procedure for matching room IDs across photo, video, LiDAR, staged-damage, and ground-truth captures is in [`docs/capture_protocol.md`](docs/capture_protocol.md). Polycam raw-data ZIPs described there need an ingestion adapter before this pipeline can process them.
+The repeatable field procedure for matching room IDs across photo, video, LiDAR, staged-damage, and ground-truth captures is in [`docs/capture_protocol.md`](docs/capture_protocol.md). Extracted Polycam raw-data folders are supported; the ZIP itself must be extracted before running the pipeline.
 
 ## Ground-truth benchmark scoring
 
@@ -92,7 +92,7 @@ Run it with:
 python pipeline\evaluation\benchmark.py benchmark\ground_truth.json
 ```
 
-The report scores opening width within 2 cm on at least 85% (including misses/phantoms), ceiling height within 1.5 cm, repeated ceiling spread within 1 cm, repeated wall spread within the larger of 1 cm or 0.5% of ground-truth length, photo/video wall lengths within 8%/3%, and photo stitched footprint within 8% with ground truth inside its reported interval, correct adjacency, and no overlaps. It reports empirical interval coverage by tier and metric. It does not score the incumbent comparison, runtime, drift ablation, or benchmark-set composition; those require their own evidence.
+The report scores opening width within 2 cm on at least 85% (including misses/phantoms), ceiling height within 1.5 cm, repeated ceiling spread within 1 cm, repeated wall spread within the larger of 1 cm or 0.5% of ground-truth length, photo/video wall lengths within 8%/3%, photo stitched footprint within 8% with ground truth inside its reported interval plus correct adjacency and no overlaps, and video whole-property footprint within 3%. It reports empirical interval coverage by tier and metric. It does not score the incumbent comparison, runtime, drift ablation, or benchmark-set composition; those require their own evidence.
 
 ## Current limitations
 
