@@ -5,7 +5,6 @@ from pathlib import Path
 from pipeline.ingest.capture import load_capture
 from pipeline.ingest.types import CaptureType
 from pipeline.ingest.rgbd import reconstruct_rgbd
-from pipeline.reconstruction.colmap import reconstruct_from_images
 from pipeline.results import build_result
 
 
@@ -42,6 +41,8 @@ def run_pipeline(input_path: str, output_root: str = "outputs") -> Path:
             f"The photo reconstruction workflow does not support "
             f"{capture.capture_type.value} captures yet."
         )
+
+    from pipeline.reconstruction.colmap import reconstruct_from_images
 
     photo_files = sorted(
         path for path in capture.path.iterdir()
