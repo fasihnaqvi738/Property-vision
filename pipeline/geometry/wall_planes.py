@@ -351,6 +351,7 @@ def _find_intersection_cycle_hypotheses(
     visited: set[tuple[int, int]] = set()
     canonical_cycles: set[tuple[int, ...]] = set()
     hypotheses = []
+    selected_by_id = {str(plane["candidate_id"]): plane for plane in selected}
     for start_a, neighbors in adjacency.items():
         for start_b in neighbors:
             start_edge = (start_a, start_b)
@@ -396,14 +397,82 @@ def _find_intersection_cycle_hypotheses(
             ) < 0:
                 continue
             support_ids = set()
+            edges = []
             for node_a, node_b in zip(face_nodes, face_nodes[1:] + face_nodes[:1]):
-                support_ids.update(edge_support.get(tuple(sorted((node_a, node_b))), set()))
+                side_support_ids = sorted(edge_support.get(tuple(sorted((node_a, node_b))), set()))
+                support_ids.update(side_support_ids)
+                point_a, point_b = nodes[node_a], nodes[node_b]
+                side_length = float(np.linalg.norm(point_b - point_a))
+                edges.append({
+                    "side_id": f"side_{len(edges) + 1}",
+                    "vertices_xy_m": [
+                        [round(float(point_a[0]), 3), round(float(point_a[1]), 3)],
+                        [round(float(point_b[0]), 3), round(float(point_b[1]), 3)],
+                    ],
+                    "length_m": round(side_length, 3),
+                    "supporting_wall_candidates": [
+                        {
+                            "candidate_id": candidate_id,
+                            "observed_length_m": selected_by_id[candidate_id].get("observed_length_m"),
+                            "support_point_count": selected_by_id[candidate_id].get("point_count"),
+                            "fit_inlier_fraction": selected_by_id[candidate_id].get("fit_inlier_fraction"),
+                        }
+                        for candidate_id in side_support_ids
+                    ],
+                    "measurement_uncertainty": {
+                        "status": "uncalibrated",
+                        "confidence_interval_m": None,
+                        "reason": "No independent ground truth or calibrated error model is available.",
+                    },
+                })
+
+            interior_angles = []
+            for index, current in enumerate(polygon):
+                previous = polygon[index - 1] - current
+                following = polygon[(index + 1) % len(polygon)] - current
+                denominator = float(np.linalg.norm(previous) * np.linalg.norm(following))
+                if denominator > 1e-8:
+                    cosine = float(np.clip(np.dot(previous, following) / denominator, -1.0, 1.0))
+                    interior_angles.append(round(float(np.degrees(np.arccos(cosine))), 2))
+
+            all_sides_supported = all(edge["supporting_wall_candidates"] for edge in edges)
+            simple = _is_simple_polygon(polygon)
+            plausible_shape = (
+                simple and 3 <= len(edges) <= 10 and all_sides_supported
+                and all(edge["length_m"] >= 0.30 for edge in edges)
+                and all(30.0 <= angle <= 150.0 for angle in interior_angles)
+                and 0.50 <= area <= 60.0
+            )
+            area_measurement = {
+                "value_m2": round(area, 3),
+                "measurement_status": "uncalibrated_candidate_geometry",
+                "confidence_interval_m2": None,
+                "uncertainty_reason": "No independent ground truth or calibrated error model is available.",
+            }
             hypotheses.append({
                 "hypothesis_id": f"intersection_cycle_{len(hypotheses) + 1}",
                 "status": "diagnostic_only",
                 "area_m2": round(area, 3),
                 "vertices_xy_m": [[round(float(x), 3), round(float(y), 3)] for x, y in polygon],
                 "supporting_wall_candidate_ids": sorted(support_ids),
+                "edges": edges,
+                "interior_angles_degrees": interior_angles,
+                "shape_review": {
+                    "status": "plausible_candidate_shape" if plausible_shape else "review_required",
+                    "simple_polygon": simple,
+                    "all_edges_have_wall_support": all_sides_supported,
+                    "side_count": len(edges),
+                    "minimum_side_length_m": round(min(edge["length_m"] for edge in edges), 3) if edges else None,
+                    "maximum_side_length_m": round(max(edge["length_m"] for edge in edges), 3) if edges else None,
+                    "minimum_interior_angle_degrees": min(interior_angles) if interior_angles else None,
+                    "maximum_interior_angle_degrees": max(interior_angles) if interior_angles else None,
+                    "criteria": "simple polygon; 3-10 supported sides; sides >=0.30 m; angles 30-150 degrees; area 0.50-60 m^2",
+                    "limitations": [
+                        "A plausible polygon shape does not establish that the face corresponds to a real room.",
+                        "The checks are provisional engineering filters, not empirically validated room classification.",
+                    ],
+                },
+                "provisional_area_measurement": area_measurement,
             })
 
     hypotheses.sort(key=lambda item: item["area_m2"], reverse=True)
@@ -422,6 +491,25 @@ def _find_intersection_cycle_hypotheses(
             "Candidate areas and thresholds are uncalibrated and require comparison with labeled geometry.",
         ],
     }
+
+
+def _is_simple_polygon(polygon: np.ndarray) -> bool:
+    """Return false when non-adjacent polygon edges cross or overlap."""
+    def orientation(a: np.ndarray, b: np.ndarray, c: np.ndarray) -> float:
+        return float((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]))
+
+    count = len(polygon)
+    for i in range(count):
+        a, b = polygon[i], polygon[(i + 1) % count]
+        for j in range(i + 1, count):
+            if j == i or j == (i + 1) % count or i == (j + 1) % count:
+                continue
+            c, d = polygon[j], polygon[(j + 1) % count]
+            o1, o2 = orientation(a, b, c), orientation(a, b, d)
+            o3, o4 = orientation(c, d, a), orientation(c, d, b)
+            if o1 * o2 < -1e-8 and o3 * o4 < -1e-8:
+                return False
+    return True
 
 
 def _write_boundary_preview(
