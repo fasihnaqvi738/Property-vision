@@ -419,6 +419,7 @@ def reconstruct_rgbd(capture_path: Path, output_dir: Path) -> dict:
             points,
             np.asarray(pose_translations, dtype=np.float32),
             output_dir,
+            vertical_axis_override="y" if polycam else None,
         )
     except (ValueError, IOError, cv2.error) as error:
         floor_analysis = {

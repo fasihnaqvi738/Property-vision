@@ -16,6 +16,7 @@ def analyze_floor_returns(
     output_dir: Path,
     *,
     grid_resolution_m: float = 0.05,
+    vertical_axis_override: str | None = None,
 ) -> dict:
     points = np.asarray(points, dtype=np.float32)
     translations = np.asarray(pose_translations, dtype=np.float32)
@@ -24,10 +25,16 @@ def analyze_floor_returns(
     if translations.ndim != 2 or translations.shape[1] != 3 or len(translations) == 0:
         raise ValueError("Floor analysis requires camera pose translations.")
 
-    # The least-varying camera-translation axis is used as a provisional
-    # vertical axis. This is a capture-specific heuristic, not a guarantee.
     translation_spans = np.ptp(translations, axis=0)
-    vertical_axis = int(np.argmin(translation_spans))
+    if vertical_axis_override is not None:
+        if vertical_axis_override not in "xyz":
+            raise ValueError("vertical_axis_override must be x, y, or z.")
+        vertical_axis = "xyz".index(vertical_axis_override)
+        vertical_axis_source = "Provided capture coordinate convention."
+    else:
+        # The least-varying camera-translation axis is a provisional heuristic.
+        vertical_axis = int(np.argmin(translation_spans))
+        vertical_axis_source = "Least-varying world-axis span of camera translations; provisional heuristic."
     horizontal_axes = [axis for axis in range(3) if axis != vertical_axis]
     vertical = points[:, vertical_axis]
     lower_decile = float(np.percentile(vertical, 10))
@@ -126,7 +133,7 @@ def analyze_floor_returns(
 
     return {
         "status": "diagnostic_only",
-        "vertical_axis_assumption": "Least-varying world-axis span of camera translations; must be confirmed against gravity/ground truth.",
+        "vertical_axis_assumption": vertical_axis_source,
         "vertical_axis": "xyz"[vertical_axis],
         "camera_translation_spans_m": [round(float(x), 4) for x in translation_spans],
         "provisional_floor_level_m": round(floor_level, 4),
