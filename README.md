@@ -29,6 +29,8 @@ Pass any other room-photo folder as the first argument. To store results elsewhe
 python main.py "C:\captures\living-room" --output-dir "C:\results"
 ```
 
+Photo reconstruction limits COLMAP to four CPU threads to keep feature extraction more predictable on high-resolution images. The setting is recorded under `reconstruction.summary.reconstruction_settings` in each result.
+
 ## Walkthrough video workflow
 
 Pass a single video file directly, or a folder containing exactly one video:

@@ -43,13 +43,21 @@ def _serialize_boundary_hypotheses(hypotheses: list[dict]) -> list[dict]:
     return serialized
 
 
-def run_pipeline(input_path: str, output_root: str = "outputs") -> Path:
+def run_pipeline(input_path: str, output_root: str = "outputs", *, pose_mode: str = "auto") -> Path:
     started_at = perf_counter()
     capture = load_capture(input_path)
     if capture.capture_type is CaptureType.RGBD:
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
         run_dir = Path(output_root) / f"{capture.path.name}_{timestamp}"
-        summary = reconstruct_rgbd(capture.path, run_dir)
+        summary = reconstruct_rgbd(capture.path, run_dir, pose_mode=pose_mode)
+        if summary.get("capture_type") == "polycam_raw_lidar" and summary.get("pose_mode") == "optimized":
+            drift_handling = {
+                "status": "partial",
+                "method": "Uses Polycam globally optimized camera poses; raw-pose comparison is available via the pose ablation evaluator.",
+                "ablation_artifact": None,
+            }
+        else:
+            drift_handling = None
         result = build_result(
             capture_id=capture.path.name,
             tier="lidar",
@@ -77,6 +85,7 @@ def run_pipeline(input_path: str, output_root: str = "outputs") -> Path:
             reconstruction_summary=summary,
             point_cloud=str(run_dir / "rgbd_point_cloud.ply"),
             limitations=summary["limitations"],
+            drift_handling=drift_handling,
             raw_capture=[str(capture.path.resolve())],
             boundary_hypotheses=_serialize_boundary_hypotheses(
                 summary.get("wall_plane_analysis", {})
@@ -105,6 +114,8 @@ def run_pipeline(input_path: str, output_root: str = "outputs") -> Path:
         return _write_result(result, run_dir / "result.json", started_at)
 
     if capture.capture_type is CaptureType.VIDEO:
+        if pose_mode != "auto":
+            raise ValueError("--pose-mode raw/optimized applies only to Polycam LiDAR exports.")
         video_extensions = {".mp4", ".mov", ".m4v", ".avi"}
         if capture.path.is_file():
             video_path = capture.path
@@ -176,6 +187,8 @@ def run_pipeline(input_path: str, output_root: str = "outputs") -> Path:
             f"The photo reconstruction workflow does not support "
             f"{capture.capture_type.value} captures yet."
         )
+    if pose_mode != "auto":
+        raise ValueError("--pose-mode raw/optimized applies only to Polycam LiDAR exports.")
 
     from pipeline.reconstruction.colmap import reconstruct_from_images
 
@@ -190,7 +203,10 @@ def run_pipeline(input_path: str, output_root: str = "outputs") -> Path:
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     run_dir = Path(output_root) / f"{capture.path.name}_{timestamp}"
-    models = reconstruct_from_images(capture.path, run_dir / "reconstruction")
+    reconstruction_settings = {"num_threads": 4}
+    models = reconstruct_from_images(
+        capture.path, run_dir / "reconstruction", **reconstruction_settings
+    )
     primary_model = max(
         models,
         key=lambda model: (model["registered_images"], model["sparse_points"]),
@@ -208,7 +224,11 @@ def run_pipeline(input_path: str, output_root: str = "outputs") -> Path:
         device=capture.metadata.device,
         input_files=[path.name for path in photo_files],
         reconstruction_method="COLMAP incremental mapping",
-        reconstruction_summary={"models": models, "scale": "arbitrary"},
+        reconstruction_summary={
+            "models": models,
+            "scale": "arbitrary",
+            "reconstruction_settings": reconstruction_settings,
+        },
         point_cloud=primary_model["point_cloud_ply"] if primary_model else None,
         limitations=limitations,
         raw_capture=[str(capture.path.resolve())],
