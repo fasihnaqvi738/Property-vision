@@ -83,6 +83,36 @@ def _write_geometry_review_geojson(
             },
         })
 
+    opening_reviews = {
+        (item.get("candidate_a"), item.get("candidate_b")): item
+        for item in wall_analysis.get("opening_analysis", {}).get("boundary_gap_reviews", [])
+    }
+    endpoint_gaps = boundary.get("nearby_unclosed_endpoint_gaps", [])
+    for gap_index, gap in enumerate(endpoint_gaps, start=1):
+        point_a = gap.get("endpoint_a_xy_m")
+        point_b = gap.get("endpoint_b_xy_m")
+        if not point_a or not point_b:
+            continue
+        review = opening_reviews.get((gap.get("candidate_a"), gap.get("candidate_b")), {})
+        features.append({
+            "type": "Feature",
+            "geometry": {"type": "LineString", "coordinates": [point_a, point_b]},
+            "properties": {
+                "feature_type": "unclassified_boundary_gap",
+                "candidate_id": review.get("candidate_id", f"boundary_gap_{gap_index}"),
+                "status": "unclassified_boundary_discontinuity",
+                "candidate_a": gap.get("candidate_a"),
+                "candidate_b": gap.get("candidate_b"),
+                "gap_extent_m": gap.get("gap_extent_m"),
+                "direction_difference_degrees": review.get("direction_difference_degrees"),
+                "lateral_offset_m": review.get("lateral_offset_m"),
+                "review_reason": review.get("review_reason", "Not classified as an opening."),
+                "review_label": None,
+                "allowed_review_labels": ["doorway", "window", "other discontinuity", "unresolved"],
+                "note": "Review target only; this is not an opening detection.",
+            },
+        })
+
     collection = {
         "type": "FeatureCollection",
         "name": "Property Vision geometry review (diagnostic only)",
