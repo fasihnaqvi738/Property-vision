@@ -1,0 +1,26 @@
+{
+  "benchmark_id": "apartment_photo_registration_diagnostic_2026_10_03",
+  "description": "Diagnostic-only comparison of saved apartment photo-tier joint SfM registration summaries. This manifest contains no measured room geometry and cannot score the official whole-property stitch gate.",
+  "property": {
+    "footprint_m2": null,
+    "adjacency": [],
+    "connector_room_ids": []
+  },
+  "ground_truth_rooms": [
+    {
+      "room_id": "R03_third_bedroom",
+      "ceiling_height_m": null,
+      "floor_area_m2": null,
+      "walls": [],
+      "openings": []
+    }
+  ],
+  "runs": [
+    {
+      "tier": "photo",
+      "capture_id": "photo_tier",
+      "room_id": "R03_third_bedroom",
+      "result_json": "evidence/before_result.json"
+    }
+  ]
+}

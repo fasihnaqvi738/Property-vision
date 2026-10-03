@@ -35,7 +35,7 @@ def _existing_files(base: Path, declaration: dict, key: str) -> list[dict]:
             for chunk in iter(lambda: handle.read(1024 * 1024), b""):
                 hasher.update(chunk)
         digest = hasher.hexdigest()
-        artifacts.append({"path": str(path), "sha256": digest})
+        artifacts.append({"path": str(value), "sha256": digest})
     return artifacts
 
 
@@ -94,8 +94,10 @@ def evaluate_fix_declaration(declaration_path: Path) -> dict:
         if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value):
             raise ValueError(f"{name} must be numeric.")
 
-    before_path = _resolve(base, _required_text(declaration, "before_report"))
-    after_path = _resolve(base, _required_text(declaration, "after_report"))
+    before_report_value = _required_text(declaration, "before_report")
+    after_report_value = _required_text(declaration, "after_report")
+    before_path = _resolve(base, before_report_value)
+    after_path = _resolve(base, after_report_value)
     if not before_path.is_file() or not after_path.is_file():
         raise FileNotFoundError("Both before_report and after_report must exist.")
     before_report = json.loads(before_path.read_text(encoding="utf-8"))
@@ -138,7 +140,7 @@ def evaluate_fix_declaration(declaration_path: Path) -> dict:
         "direction": direction,
         "acceptance_threshold": float(threshold),
         "before": {
-            "report": str(before_path),
+            "report": before_report_value,
             "value": before_value,
             "gate_pass": before_gate_pass,
             "distance_from_threshold": before_margin,
@@ -148,7 +150,7 @@ def evaluate_fix_declaration(declaration_path: Path) -> dict:
             "predicted_delta": predicted_delta,
         },
         "after": {
-            "report": str(after_path),
+            "report": after_report_value,
             "value": after_value,
             "gate_pass": after_gate_pass,
             "actual_delta": actual_delta,

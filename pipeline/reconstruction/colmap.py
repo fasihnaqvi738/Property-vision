@@ -17,6 +17,7 @@ def reconstruct_from_images(
     max_num_features: int | None = None,
     matching_strategy: str = "exhaustive",
     sequential_overlap: int = 10,
+    random_seed: int = 42,
 ) -> list[dict]:
     """Create portable COLMAP text models and PLY point clouds for a photo folder."""
     image_dir = Path(image_dir).expanduser().resolve()
@@ -78,10 +79,19 @@ def reconstruct_from_images(
             )
         else:
             raise ValueError("matching_strategy must be 'exhaustive' or 'sequential'.")
+        mapper_options = pycolmap.IncrementalPipelineOptions()
+        mapper_options.random_seed = int(random_seed)
+        mapper_options.mapper.random_seed = int(random_seed)
+        mapper_options.triangulation.random_seed = int(random_seed)
+        pycolmap.set_random_seed(int(random_seed))
+        if num_threads is not None:
+            mapper_options.num_threads = int(num_threads)
+            mapper_options.mapper.num_threads = int(num_threads)
         reconstructions = pycolmap.incremental_mapping(
             database_path,
             staged_image_dir,
             sparse_path,
+            options=mapper_options,
         )
 
     if not reconstructions:

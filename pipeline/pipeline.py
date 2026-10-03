@@ -7,7 +7,12 @@ from time import perf_counter
 from pipeline.ingest.capture import load_capture
 from pipeline.ingest.types import CaptureType
 from pipeline.ingest.rgbd import reconstruct_rgbd
-from pipeline.ingest.photo import PHOTO_EXTENSIONS, discover_photos, stage_photo_images
+from pipeline.ingest.photo import (
+    PHOTO_EXTENSIONS,
+    discover_photos,
+    infer_photo_device,
+    stage_photo_images,
+)
 from pipeline.ingest.video import sample_walkthrough_video
 from pipeline.results import build_result
 from pipeline.validation import validate_result
@@ -158,6 +163,14 @@ def run_pipeline(
                 ]
                 if summary.get("capture_type") == "polycam_raw_lidar"
                 else [
+                    "lowres_wide/*.png",
+                    "lowres_depth/*.png",
+                    "confidence/*.png",
+                    "lowres_wide_intrinsics/*.pincam",
+                    "lowres_wide.traj",
+                ]
+                if summary.get("capture_type") == "arkitscenes_raw_rgbd"
+                else [
                     "rgb.mp4",
                     "camera_matrix.csv",
                     "odometry.csv",
@@ -220,6 +233,7 @@ def run_pipeline(
                     "max_num_features": 4096,
                     "matching_strategy": "sequential",
                     "sequential_overlap": 30,
+                    "random_seed": 42,
                 }
                 room_summaries = []
                 plan_rooms = []
@@ -319,6 +333,7 @@ def run_pipeline(
             "max_num_features": 4096,
             "matching_strategy": "sequential",
             "sequential_overlap": 30,
+            "random_seed": 42,
         }
         models = reconstruct_from_images(
             run_dir / sampling["frame_directory"],
@@ -404,9 +419,14 @@ def run_pipeline(
                 )
             room_inputs.append((folder.name, folder, images))
 
+        if capture.metadata.device == "unknown":
+            capture.metadata.device = infer_photo_device(
+                [image for _, _, images in room_inputs for image in images]
+            ) or "unknown"
+
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
         run_dir = Path(output_root) / f"{capture.path.name}_{timestamp}"
-        reconstruction_settings = {"num_threads": 4}
+        reconstruction_settings = {"num_threads": 4, "random_seed": 42}
         per_room = []
         plan_rooms = []
         all_input_files = []
@@ -459,12 +479,16 @@ def run_pipeline(
                 shutil.copy2(image, joint_image_dir / f"{room_id}__{image.name}")
         joint_models = []
         joint_error = None
+        joint_reconstruction_settings = {
+            "num_threads": 1,
+            "matching_strategy": "exhaustive",
+            "random_seed": 42,
+        }
         try:
             joint_models = reconstruct_from_images(
                 joint_image_dir,
                 run_dir / "property_reconstruction",
-                num_threads=4,
-                matching_strategy="exhaustive",
+                **joint_reconstruction_settings,
             )
         except (RuntimeError, ValueError, OSError) as error:
             # Per-room results remain useful when views cannot form a joint
@@ -593,6 +617,7 @@ def run_pipeline(
                 "total_registered_photos": sum(item["registered_photo_count"] for item in per_room),
                 "scale": "arbitrary_per_room",
                 "reconstruction_settings": reconstruction_settings,
+                "joint_reconstruction_settings": joint_reconstruction_settings,
                 "joint_property_reconstruction": {
                     "status": "diagnostic_only" if joint_models else "failed",
                     "method": "COLMAP exhaustive matching over all room-folder photos",
@@ -640,9 +665,12 @@ def run_pipeline(
             f"No JPEG, PNG, HEIC, or HEIF photos found directly in {capture.path} or in its immediate room subfolders."
         )
 
+    if capture.metadata.device == "unknown":
+        capture.metadata.device = infer_photo_device(photo_files) or "unknown"
+
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     run_dir = Path(output_root) / f"{capture.path.name}_{timestamp}"
-    reconstruction_settings = {"num_threads": 4}
+    reconstruction_settings = {"num_threads": 4, "random_seed": 42}
     staged_images = stage_photo_images(photo_files, run_dir / "photo_frames")
     models = reconstruct_from_images(
         staged_images[0].parent, run_dir / "reconstruction", **reconstruction_settings

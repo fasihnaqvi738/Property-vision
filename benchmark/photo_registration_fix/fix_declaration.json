@@ -1,0 +1,35 @@
+{
+  "fix_id": "photo_joint_sfm_determinism_2026_10_03",
+  "target_gate": "photo_whole_property_stitch",
+  "target_metric": "joint_model_registered_photo_coverage_percent",
+  "direction": "higher_is_better",
+  "acceptance_threshold": 100.0,
+  "root_cause_hypothesis": "The joint COLMAP run was sensitive to mapping configuration and thread scheduling. Pinning the random seed and using one mapper thread was followed by higher registration coverage on the same 23 staged apartment photos. This comparison is not a controlled ablation, so the configuration change is a plausible contributor rather than a proven sole cause.",
+  "evidence_paths": [
+    "evidence/before_result.json",
+    "evidence/after_result.json"
+  ],
+  "proposed_fix": "Use a fixed COLMAP random seed and one thread for the cross-room joint reconstruction to make the shared sparse model reproducible and improve the proportion of the staged apartment photos that register together. This operational diagnostic target is not the case-study requirement to produce a measured, correctly placed and connected floor plan.",
+  "predicted_after_value": 80.0,
+  "before_report": "before_report.json",
+  "after_report": "after_report.json",
+  "before_run_artifacts": [
+    "evidence/before_result.json"
+  ],
+  "after_run_artifacts": [
+    "evidence/after_result.json"
+  ],
+  "code_change_paths": [
+    "../../pipeline/reconstruction/colmap.py",
+    "../../pipeline/pipeline.py",
+    "../../pipeline/evaluation/benchmark.py",
+    "../../pipeline/evaluation/export_photo_registration_snapshot.py"
+  ],
+  "regeneration_commands": [
+    "python -m pipeline.evaluation.export_photo_registration_snapshot outputs/photo_tier_20261003T083038743867Z/result.json benchmark/photo_registration_fix/evidence/before_result.json",
+    "python -m pipeline.evaluation.export_photo_registration_snapshot outputs/photo_final_verification/photo_tier_20261003T101629270757Z/result.json benchmark/photo_registration_fix/evidence/after_result.json",
+    "python -m pipeline.evaluation.benchmark benchmark/photo_registration_fix/manifest_before.json --output benchmark/photo_registration_fix/before_report.json",
+    "python -m pipeline.evaluation.benchmark benchmark/photo_registration_fix/manifest_after.json --output benchmark/photo_registration_fix/after_report.json",
+    "python -m pipeline.evaluation.fix_loop benchmark/photo_registration_fix/fix_declaration.json --output benchmark/photo_registration_fix/fix_loop_report.json"
+  ]
+}

@@ -1,0 +1,159 @@
+{
+  "benchmark_id": "apartment_photo_registration_diagnostic_2026_10_03",
+  "benchmark_readiness": {
+    "ready": false,
+    "checks": {
+      "room_set": {
+        "passed": false,
+        "rooms": 1,
+        "required_rooms": 3,
+        "connector_ids": [],
+        "detail": "Requires at least three rooms and one declared connector/hall."
+      },
+      "measured_ground_truth": {
+        "passed": false,
+        "rooms_with_area_ceiling_and_wall_lengths": 0,
+        "rooms_declared": 1,
+        "property_footprint_measured": false,
+        "adjacency_edges": 0,
+        "detail": "Requires measured room area, ceiling height, wall lengths, property footprint/adjacency, and at least one measured opening."
+      },
+      "same_rooms_all_tiers": {
+        "passed": false,
+        "rooms_with_photo_video_lidar": [],
+        "rooms_missing_any_tier": [
+          "R03_third_bedroom"
+        ]
+      },
+      "repeat_capture": {
+        "passed": false,
+        "repeat_groups_with_two_or_more_runs": 0
+      },
+      "staged_damage": {
+        "passed": false,
+        "labeled_examples": 0,
+        "distinct_classes": [],
+        "detail": "Requires two measured examples from different classes, each tied to a surface and an image polygon."
+      }
+    }
+  },
+  "run_provenance": [
+    {
+      "tier": "photo",
+      "capture_id": "photo_tier",
+      "room_id": "R03_third_bedroom",
+      "repeat_group": null,
+      "result_json": "evidence/after_result.json"
+    }
+  ],
+  "metric_rows": [],
+  "diagnostic_boundary_candidate_area_rows": [],
+  "diagnostic_boundary_candidate_wall_rows": [],
+  "repeatability": [],
+  "photo_property_stitch": [],
+  "photo_joint_registration_diagnostics": [
+    {
+      "capture_id": "photo_tier",
+      "result_json": "evidence/after_result.json",
+      "input_photo_count": 23,
+      "largest_model_registered_photos": 20,
+      "largest_model_registered_photo_coverage_percent": 86.957,
+      "largest_model_room_count": 8,
+      "largest_model_spans_all_room_folders": true,
+      "diagnostic_only": true
+    }
+  ],
+  "video_property_footprint": [],
+  "runtime_rows": [
+    {
+      "tier": "photo",
+      "capture_id": "photo_tier",
+      "room_id": "R03_third_bedroom",
+      "result_json": "evidence/after_result.json",
+      "runtime_seconds": null,
+      "under_15_minutes": null
+    }
+  ],
+  "lidar_incumbent_comparison": {
+    "status": "not_provided",
+    "app": null,
+    "version": null,
+    "required_room_count": 2,
+    "compared_room_count": 0,
+    "compared_dimension_count": 0,
+    "wins": 0,
+    "ties": 0,
+    "losses": 0,
+    "win_or_tie_rate": null,
+    "required_rate": 0.7,
+    "gate_pass": null,
+    "rows": []
+  },
+  "gates": {
+    "photo_opening_detection_and_width": {
+      "within_2cm": 0,
+      "ground_truth_openings": 0,
+      "phantom_predictions": 0,
+      "score": null,
+      "required_rate": 0.85,
+      "gate_pass": null
+    },
+    "photo_wall_lengths": {
+      "within_tolerance": 0,
+      "walls_scored": 0,
+      "relative_tolerance": 0.08,
+      "gate_pass": null
+    },
+    "video_wall_lengths": {
+      "within_tolerance": 0,
+      "walls_scored": 0,
+      "relative_tolerance": 0.03,
+      "gate_pass": null
+    },
+    "photo_whole_property_stitch": {
+      "captures_scored": 0,
+      "gate_pass": null,
+      "joint_model_registered_photo_coverage_percent": 86.957,
+      "joint_model_registration_diagnostic": {
+        "captures_with_diagnostic": 1,
+        "mean_largest_model_registered_photo_coverage_percent": 86.957,
+        "runs": [
+          {
+            "capture_id": "photo_tier",
+            "result_json": "evidence/after_result.json",
+            "input_photo_count": 23,
+            "largest_model_registered_photos": 20,
+            "largest_model_registered_photo_coverage_percent": 86.957,
+            "largest_model_room_count": 8,
+            "largest_model_spans_all_room_folders": true,
+            "diagnostic_only": true
+          }
+        ],
+        "interpretation": "SfM registration coverage measures images placed in a shared sparse camera model only. It does not measure room placement, adjacency, overlaps, metric footprint, or the official stitch gate."
+      }
+    },
+    "lidar_incumbent_comparison": {
+      "compared_rooms": 0,
+      "compared_dimensions": 0,
+      "win_or_tie_rate": null,
+      "required_rate": 0.7,
+      "gate_pass": null
+    },
+    "single_command_runtime_under_15_minutes": {
+      "runs_declared": 1,
+      "runs_with_runtime": 0,
+      "runs_under_15_minutes": 0,
+      "threshold_seconds": 900,
+      "gate_pass": null,
+      "clean_machine_verified": false,
+      "detail": "This measures saved local run times; repeat on a clean machine to satisfy the environment part of the requirement."
+    }
+  },
+  "interval_calibration": {},
+  "limitations": [
+    "Only explicitly mapped ground-truth objects are compared; reviewer mapping quality matters.",
+    "Missing or unavailable product measurements fail applicable gates and remain visible in metric_rows.",
+    "Interval coverage is empirical and cannot establish calibration with a small sample set.",
+    "Timing and drift ablation require separate evidence and are not inferred from measurement scores."
+  ]
+}

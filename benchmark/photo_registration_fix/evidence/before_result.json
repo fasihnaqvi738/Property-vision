@@ -1,0 +1,71 @@
+{
+  "evidence_kind": "photo_joint_registration_summary",
+  "evidence_schema_version": 1,
+  "source_artifact": {
+    "basename": "result.json",
+    "sha256": "fb6334cd055f6e90cc5bc996116da57e7dbbfaad93b523a480e31071fc04bda5"
+  },
+  "capture": {
+    "capture_id": "photo_tier"
+  },
+  "reconstruction": {
+    "summary": {
+      "joint_property_reconstruction": {
+        "status": "diagnostic_only",
+        "method": "COLMAP exhaustive matching over all room-folder photos",
+        "input_photo_count": 23,
+        "registered_image_count": 8,
+        "model_count": 1,
+        "largest_model_registered_photos": 8,
+        "largest_model_photo_coverage_percent": 34.8,
+        "largest_model_room_ids": [
+          "R01_master_bedroom",
+          "R02_second_bedroom",
+          "R03_third_bedroom",
+          "R05_family_lounge",
+          "R06_living_dining",
+          "R07_kitchen"
+        ],
+        "largest_model_room_count": 6,
+        "largest_model_spans_all_room_folders": false,
+        "rooms_with_registered_images": [
+          "R01_master_bedroom",
+          "R02_second_bedroom",
+          "R03_third_bedroom",
+          "R05_family_lounge",
+          "R06_living_dining",
+          "R07_kitchen"
+        ],
+        "failure_reason": null,
+        "point_clouds_are_metric_oriented_or_room_segmented": false,
+        "models": [
+          {
+            "model_id": 0,
+            "registered_images": 8,
+            "registered_image_names": [
+              "R01_master_bedroom__image_0003.jpeg",
+              "R02_second_bedroom__image_0002.jpeg",
+              "R03_third_bedroom__image_0002.jpeg",
+              "R05_family_lounge__image_0001.jpeg",
+              "R06_living_dining__image_0003.jpeg",
+              "R06_living_dining__image_0004.jpeg",
+              "R07_kitchen__image_0003.jpeg",
+              "R07_kitchen__image_0004.jpeg"
+            ],
+            "sparse_points": 158,
+            "registered_room_ids": [
+              "R01_master_bedroom",
+              "R02_second_bedroom",
+              "R03_third_bedroom",
+              "R05_family_lounge",
+              "R06_living_dining",
+              "R07_kitchen"
+            ],
+            "registered_room_count": 6
+          }
+        ]
+      }
+    }
+  },
+  "projection_note": "Generated from a saved result.json. Contains registration counts, room IDs, and image basenames only; excludes photographs, point clouds, camera poses, and machine-specific filesystem paths."
+}

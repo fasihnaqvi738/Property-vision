@@ -1,0 +1,79 @@
+{
+  "fix_id": "photo_joint_sfm_determinism_2026_10_03",
+  "benchmark_id": "apartment_photo_registration_diagnostic_2026_10_03",
+  "target_gate": "photo_whole_property_stitch",
+  "target_metric": "joint_model_registered_photo_coverage_percent",
+  "direction": "higher_is_better",
+  "acceptance_threshold": 100.0,
+  "before": {
+    "report": "before_report.json",
+    "value": 34.783,
+    "gate_pass": null,
+    "distance_from_threshold": 65.217
+  },
+  "prediction": {
+    "value": 80.0,
+    "predicted_delta": 45.217
+  },
+  "after": {
+    "report": "after_report.json",
+    "value": 86.957,
+    "gate_pass": null,
+    "actual_delta": 52.17399999999999,
+    "improvement_in_declared_direction": true,
+    "distance_from_threshold": 13.043000000000006,
+    "moved_toward_threshold": true,
+    "threshold_satisfied": false
+  },
+  "prediction_absolute_error": 6.956999999999994,
+  "fix_loop_gate_pass": false,
+  "artifacts": {
+    "evidence": [
+      {
+        "path": "evidence/before_result.json",
+        "sha256": "e2b5dca116fc879725d07e4819b838ccf248ca7f7954ae8d7c92c47611d1845c"
+      },
+      {
+        "path": "evidence/after_result.json",
+        "sha256": "18f1b08cccb4c826f70fe989a370a0fcfed5c7b73d7a57881ee8f962b2583edf"
+      }
+    ],
+    "code_changes": [
+      {
+        "path": "../../pipeline/reconstruction/colmap.py",
+        "sha256": "1c6cfaa3927e988d1b14ed4a83beb045717d6814be63d530b1c8fb90147902fd"
+      },
+      {
+        "path": "../../pipeline/pipeline.py",
+        "sha256": "42cd0e43f024ac192ca77d5f7320f7a8124786f1010d251085787f68bd04e091"
+      },
+      {
+        "path": "../../pipeline/evaluation/benchmark.py",
+        "sha256": "2237b9030c5f738a20d2a32385cd0e0cb43b7367f6d11d328616611b24cb772d"
+      },
+      {
+        "path": "../../pipeline/evaluation/export_photo_registration_snapshot.py",
+        "sha256": "219007396747e81111c806ac14c66ba6fc3619d2e4d46f239a4911ae56c1d58d"
+      }
+    ],
+    "before_runs": [
+      {
+        "path": "evidence/before_result.json",
+        "sha256": "e2b5dca116fc879725d07e4819b838ccf248ca7f7954ae8d7c92c47611d1845c"
+      }
+    ],
+    "after_runs": [
+      {
+        "path": "evidence/after_result.json",
+        "sha256": "18f1b08cccb4c826f70fe989a370a0fcfed5c7b73d7a57881ee8f962b2583edf"
+      }
+    ]
+  },
+  "regeneration_commands": [
+    "python -m pipeline.evaluation.export_photo_registration_snapshot outputs/photo_tier_20261003T083038743867Z/result.json benchmark/photo_registration_fix/evidence/before_result.json",
+    "python -m pipeline.evaluation.export_photo_registration_snapshot outputs/photo_final_verification/photo_tier_20261003T101629270757Z/result.json benchmark/photo_registration_fix/evidence/after_result.json",
+    "python -m pipeline.evaluation.benchmark benchmark/photo_registration_fix/manifest_before.json --output benchmark/photo_registration_fix/before_report.json",
+    "python -m pipeline.evaluation.benchmark benchmark/photo_registration_fix/manifest_after.json --output benchmark/photo_registration_fix/after_report.json",
+    "python -m pipeline.evaluation.fix_loop benchmark/photo_registration_fix/fix_declaration.json --output benchmark/photo_registration_fix/fix_loop_report.json"
+  ]
+}

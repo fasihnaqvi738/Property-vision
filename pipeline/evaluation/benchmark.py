@@ -543,6 +543,7 @@ def evaluate(manifest_path: Path) -> dict:
     repeat_groups: dict[tuple[str, str, str], list[dict]] = defaultdict(list)
     property_rows = []
     video_footprint_rows = []
+    photo_registration_rows = []
     candidate_area_rows = []
     candidate_wall_rows = []
     runtime_rows = []
@@ -558,6 +559,30 @@ def evaluate(manifest_path: Path) -> dict:
         gt_room_id = str(run["room_id"])
         reconstruction = result.get("reconstruction")
         summary = reconstruction.get("summary", {}) if isinstance(reconstruction, dict) else {}
+        joint_photo = summary.get("joint_property_reconstruction", {}) if isinstance(summary, dict) else {}
+        if tier == "photo" and isinstance(joint_photo, dict) and joint_photo:
+            input_photo_count = joint_photo.get("input_photo_count")
+            registered_photo_count = joint_photo.get("largest_model_registered_photos")
+            if (
+                isinstance(input_photo_count, int) and not isinstance(input_photo_count, bool)
+                and input_photo_count > 0
+                and isinstance(registered_photo_count, int)
+                and not isinstance(registered_photo_count, bool)
+            ):
+                photo_registration_rows.append({
+                    "capture_id": str(capture_id),
+                    "result_json": str(run["result_json"]),
+                    "input_photo_count": input_photo_count,
+                    "largest_model_registered_photos": registered_photo_count,
+                    "largest_model_registered_photo_coverage_percent": round(
+                        registered_photo_count / input_photo_count * 100, 3
+                    ),
+                    "largest_model_room_count": joint_photo.get("largest_model_room_count"),
+                    "largest_model_spans_all_room_folders": joint_photo.get(
+                        "largest_model_spans_all_room_folders"
+                    ),
+                    "diagnostic_only": True,
+                })
         runtime = summary.get("processing_runtime_seconds") if isinstance(summary, dict) else None
         valid_runtime = (
             float(runtime) if isinstance(runtime, (int, float)) and not isinstance(runtime, bool)
@@ -567,7 +592,7 @@ def evaluate(manifest_path: Path) -> dict:
             "tier": tier,
             "capture_id": str(capture_id),
             "room_id": gt_room_id,
-            "result_json": str(result_path),
+            "result_json": str(run["result_json"]),
             "runtime_seconds": valid_runtime,
             "under_15_minutes": valid_runtime <= 900 if valid_runtime is not None else None,
         })
@@ -829,10 +854,27 @@ def evaluate(manifest_path: Path) -> dict:
             "items_scored": len(tier_items),
             "gate_pass": bool(tier_items) and all(item["gate_pass"] for item in tier_items),
         }
-    if property_rows:
+    if property_rows or photo_registration_rows:
+        mean_registration_coverage = (
+            round(sum(row["largest_model_registered_photo_coverage_percent"] for row in photo_registration_rows)
+                  / len(photo_registration_rows), 3)
+            if photo_registration_rows else None
+        )
         gates["photo_whole_property_stitch"] = {
             "captures_scored": len(property_rows),
-            "gate_pass": all(row["gate_pass"] for row in property_rows),
+            "gate_pass": all(row["gate_pass"] for row in property_rows) if property_rows else None,
+            # Exposed as a flat diagnostic for fix-loop comparisons. This value
+            # is not a substitute for the measured whole-property stitch gate.
+            "joint_model_registered_photo_coverage_percent": mean_registration_coverage,
+            "joint_model_registration_diagnostic": {
+                "captures_with_diagnostic": len(photo_registration_rows),
+                "mean_largest_model_registered_photo_coverage_percent": mean_registration_coverage,
+                "runs": photo_registration_rows,
+                "interpretation": (
+                    "SfM registration coverage measures images placed in a shared sparse camera model only. "
+                    "It does not measure room placement, adjacency, overlaps, metric footprint, or the official stitch gate."
+                ),
+            },
         }
     if video_footprint_rows:
         gates["video_whole_property_footprint"] = {
@@ -927,7 +969,7 @@ def evaluate(manifest_path: Path) -> dict:
                 "capture_id": item["capture_id"],
                 "room_id": item["room_id"],
                 "repeat_group": item["run"].get("repeat_group"),
-                "result_json": str(item["result_path"]),
+                "result_json": str(item["run"]["result_json"]),
             }
             for item in loaded_runs
         ],
@@ -936,6 +978,7 @@ def evaluate(manifest_path: Path) -> dict:
         "diagnostic_boundary_candidate_wall_rows": candidate_wall_rows,
         "repeatability": repeatability,
         "photo_property_stitch": property_rows,
+        "photo_joint_registration_diagnostics": photo_registration_rows,
         "video_property_footprint": video_footprint_rows,
         "runtime_rows": runtime_rows,
         "lidar_incumbent_comparison": incumbent_report,

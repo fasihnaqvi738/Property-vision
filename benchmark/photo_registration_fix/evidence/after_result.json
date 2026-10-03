@@ -1,0 +1,107 @@
+{
+  "evidence_kind": "photo_joint_registration_summary",
+  "evidence_schema_version": 1,
+  "source_artifact": {
+    "basename": "result.json",
+    "sha256": "046abb8f3d6d76dec1ab25ffe52e3bdc36bfd3187e280ea2d197785af98331d6"
+  },
+  "capture": {
+    "capture_id": "photo_tier"
+  },
+  "reconstruction": {
+    "summary": {
+      "joint_property_reconstruction": {
+        "status": "diagnostic_only",
+        "method": "COLMAP exhaustive matching over all room-folder photos",
+        "input_photo_count": 23,
+        "registered_image_count": 20,
+        "model_count": 2,
+        "largest_model_registered_photos": 20,
+        "largest_model_photo_coverage_percent": 87.0,
+        "largest_model_room_ids": [
+          "C01_lobby",
+          "R01_master_bedroom",
+          "R02_second_bedroom",
+          "R03_third_bedroom",
+          "R04_fourth_bedroom",
+          "R05_family_lounge",
+          "R06_living_dining",
+          "R07_kitchen"
+        ],
+        "largest_model_room_count": 8,
+        "largest_model_spans_all_room_folders": true,
+        "rooms_with_registered_images": [
+          "C01_lobby",
+          "R01_master_bedroom",
+          "R02_second_bedroom",
+          "R03_third_bedroom",
+          "R04_fourth_bedroom",
+          "R05_family_lounge",
+          "R06_living_dining",
+          "R07_kitchen"
+        ],
+        "failure_reason": null,
+        "point_clouds_are_metric_oriented_or_room_segmented": false,
+        "models": [
+          {
+            "model_id": 0,
+            "registered_images": 5,
+            "registered_image_names": [
+              "R05_family_lounge__image_0001.jpeg",
+              "R06_living_dining__image_0002.jpeg",
+              "R07_kitchen__image_0001.jpeg",
+              "R07_kitchen__image_0002.jpeg",
+              "R07_kitchen__image_0004.jpeg"
+            ],
+            "sparse_points": 8,
+            "registered_room_ids": [
+              "R05_family_lounge",
+              "R06_living_dining",
+              "R07_kitchen"
+            ],
+            "registered_room_count": 3
+          },
+          {
+            "model_id": 1,
+            "registered_images": 20,
+            "registered_image_names": [
+              "C01_lobby__image_0002.jpeg",
+              "R01_master_bedroom__image_0001.jpeg",
+              "R01_master_bedroom__image_0002.jpeg",
+              "R01_master_bedroom__image_0003.jpeg",
+              "R02_second_bedroom__image_0001.jpeg",
+              "R02_second_bedroom__image_0002.jpeg",
+              "R03_third_bedroom__image_0001.jpeg",
+              "R03_third_bedroom__image_0002.jpeg",
+              "R03_third_bedroom__image_0003.jpeg",
+              "R04_fourth_bedroom__image_0002.jpeg",
+              "R05_family_lounge__image_0001.jpeg",
+              "R05_family_lounge__image_0002.jpeg",
+              "R06_living_dining__image_0001.jpeg",
+              "R06_living_dining__image_0002.jpeg",
+              "R06_living_dining__image_0003.jpeg",
+              "R06_living_dining__image_0004.jpeg",
+              "R07_kitchen__image_0001.jpeg",
+              "R07_kitchen__image_0002.jpeg",
+              "R07_kitchen__image_0003.jpeg",
+              "R07_kitchen__image_0004.jpeg"
+            ],
+            "sparse_points": 348,
+            "registered_room_ids": [
+              "C01_lobby",
+              "R01_master_bedroom",
+              "R02_second_bedroom",
+              "R03_third_bedroom",
+              "R04_fourth_bedroom",
+              "R05_family_lounge",
+              "R06_living_dining",
+              "R07_kitchen"
+            ],
+            "registered_room_count": 8
+          }
+        ]
+      }
+    }
+  },
+  "projection_note": "Generated from a saved result.json. Contains registration counts, room IDs, and image basenames only; excludes photographs, point clouds, camera poses, and machine-specific filesystem paths."
+}
