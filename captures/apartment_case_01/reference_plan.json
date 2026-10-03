@@ -8,9 +8,15 @@
     "image_height_px": 826,
     "geometry_method": "manual_reference_trace",
     "dimension_method": "transcribed_from_printed_plan_labels",
+    "dimension_truth_policy": {
+      "status": "authoritative_for_this_case",
+      "basis": "User instruction: accept the printed floor-plan dimensions as accurate for apartment_case_01.",
+      "independent_field_measurement": false,
+      "scope": "This apartment only; these values are not priors for the unseen walk-in property."
+    },
     "limitations": [
       "Room outlines are manually traced from the supplied raster drawing and remain in image-pixel coordinates; the raster was not independently calibrated to metric scale.",
-      "Printed room dimensions are reference values from the drawing, not independent tape or laser measurements.",
+      "Printed room dimensions are treated as authoritative targets for this apartment per user instruction, but have no independent tape or laser verification.",
       "Door/opening widths and wall thicknesses are not legible or dimensioned consistently; adjacency is recorded without a width claim.",
       "No apartment LiDAR capture was supplied."
     ]

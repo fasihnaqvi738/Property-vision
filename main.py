@@ -14,7 +14,7 @@ def main() -> None:
         "capture_folder",
         nargs="?",
         default="captures/photo_room",
-        help="Photo folder/collection, walkthrough video/file collection, RGB-D bundle, or extracted Polycam Raw Data folder.",
+        help="Photo/video collection, supplied RGB-D bundle, Polycam Raw Data folder, or ARKitScenes raw RGB-D scan folder.",
     )
     parser.add_argument(
         "--output-dir",

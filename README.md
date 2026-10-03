@@ -86,6 +86,19 @@ python main.py "D:\datasets\ARKitScenes\raw\Training\<video_id>"
 
 This route matches each sparse trajectory pose to the nearest RGB, LiDAR depth, confidence, and intrinsics timestamps, rejecting matches more than 50 ms apart. Depth is interpreted as documented millimeters and Apple confidence value 0 is excluded. The camera-to-world trajectory and ARKit axis convention are assumptions pending comparison with a registered reference scan; output walls and room faces remain diagnostic only. Download only a suitable scan outside this repository, and confirm the dataset license permits your intended use. Capture and output folders are Git-ignored.
 
+#### Reproduce the public LiDAR depth check
+
+An optional downloader fetches ARKitScenes raw sample `42445884` (about 161 MB compressed), including low-resolution iPad Pro RGB-D and the dataset's FARO-projected high-resolution depth reference. This gives a real sensor-depth check without putting images or point clouds in Git:
+
+```powershell
+python -m pipeline.evaluation.download_arkitscenes_sample --output-dir "captures\_public_arkitscenes"
+python main.py "captures\_public_arkitscenes\raw\Training\42445884" --output-dir "outputs\arkitscenes_public_sample"
+python -m pipeline.evaluation.evaluate_arkitscenes_depth "captures\_public_arkitscenes\raw\Training\42445884" --output "outputs\arkitscenes_public_sample\arkitscenes_depth_evaluation.json"
+python -m pipeline.validation "outputs\arkitscenes_public_sample"
+```
+
+The downloader records source URLs and SHA-256 hashes in the ignored capture folder. On the development workstation, Property Vision processed 78,343 points in 3.267 s; the separate depth evaluator matched 40 frame pairs and 350,043 valid pixels (2.18 cm MAE; 93.293% within 5 cm). This is iPad Pro sensor-depth evidence, not iPhone evidence or a room-dimension/whole-property-plan gate. Review the dataset terms before use; the media is not bundled or redistributed.
+
 To create a drift-handling ablation from the same extracted capture, run it twice:
 
 ```powershell

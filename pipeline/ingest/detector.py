@@ -1,10 +1,16 @@
 from pathlib import Path
 
 from pipeline.ingest.types import CaptureType
+from pipeline.ingest.arkitscenes import is_arkitscenes_raw_capture
 
 
 def detect_capture_type(input_path: str) -> CaptureType:
     path = Path(input_path)
+
+    # ARKitScenes raw captures are timestamped RGB-D folders rather than one
+    # video; identify them before the generic image-folder checks below.
+    if path.is_dir() and is_arkitscenes_raw_capture(path):
+        return CaptureType.RGBD
 
     # Polycam raw LiDAR exports contain synchronized keyframe subdirectories.
     keyframes = path / "keyframes"

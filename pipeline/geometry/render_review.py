@@ -22,7 +22,17 @@ def render_geometry_review_svg(geojson_path: Path, svg_path: Path) -> Path:
                 coordinates.extend(ring)
     coordinates = [point for point in coordinates if len(point) >= 2]
     if not coordinates:
-        raise ValueError("Cannot render geometry review: GeoJSON contains no coordinates.")
+        empty_svg = [
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="{WIDTH}" height="{HEIGHT}" viewBox="0 0 {WIDTH} {HEIGHT}">',
+            '<rect width="100%" height="100%" fill="#ffffff"/>',
+            '<text x="35" y="39" font-family="Arial,sans-serif" font-size="25" font-weight="700" fill="#18212b">Geometry review</text>',
+            '<text x="35" y="64" font-family="Arial,sans-serif" font-size="14" font-weight="700" fill="#9d1b1b">DIAGNOSTIC ONLY — NOT AN ACCEPTED FLOOR PLAN</text>',
+            '<text x="35" y="120" font-family="Arial,sans-serif" font-size="17" fill="#303943">No floor, wall, or boundary coordinates were supported in this capture.</text>',
+            '<text x="35" y="150" font-family="Arial,sans-serif" font-size="14" fill="#5c6670">This is an unavailable geometry result, not evidence that the room is empty.</text>',
+            '</svg>',
+        ]
+        Path(svg_path).write_text("\n".join(empty_svg) + "\n", encoding="utf-8")
+        return Path(svg_path)
 
     xs, ys = [float(point[0]) for point in coordinates], [float(point[1]) for point in coordinates]
     min_x, max_x = min(xs), max(xs)

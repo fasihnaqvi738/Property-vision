@@ -171,8 +171,9 @@ def _dimension_report(
         "spaces_consistent_with_reference_labels": sum(row["status"] == "consistent" for row in rows),
         "mean_absolute_label_difference_m": sum(scored) / len(scored) if scored else None,
         "rows": rows,
-        "interpretation": "Copied dimension-label consistency only; these labels are not independently measured truth.",
-        "independent_metric_accuracy": "not_scored",
+        "reference_target_policy": "User-designated authoritative printed dimensions for apartment_case_01.",
+        "interpretation": "The labels are valid scoring targets for this case by user instruction. A physical tape/laser cross-check is unavailable, and this does not establish accuracy on another property.",
+        "independent_physical_verification": "not_available",
     }
 
 
@@ -350,6 +351,9 @@ def evaluate_plan_against_reference(reference_path: Path, candidate_path: Path, 
         "candidate_source": "manual reference trace" if manual_self_check else "candidate GeoJSON",
         "inputs": {"reference_plan": str(reference_path), "candidate_geojson": str(candidate_path)},
         "coordinate_frame": {"name": coordinate_frame, "width_px": width, "height_px": height},
+        "dimension_truth_policy": reference_source.get("dimension_truth_policy", {
+            "status": "printed_labels_without_explicit_authority"
+        }),
         "space_detection": {
             "reference_spaces": len(truth_ids),
             "candidate_spaces": len(predicted_ids),

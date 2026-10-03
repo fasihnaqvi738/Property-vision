@@ -13,7 +13,7 @@
     "opening_widths_available": 0
   },
   "photo_run": {
-    "result": "C:\\Property Vision\\property-vision\\outputs\\photo_tier_20261002T185859841795Z\\result.json",
+    "result": "C:\\Property Vision\\property-vision\\outputs\\photo_final_verification\\photo_tier_20261003T101629270757Z\\result.json",
     "total_room_groups": 8,
     "groups_with_models": 2,
     "registered_photo_total": 7,
@@ -86,15 +86,21 @@
     "joint_reconstruction": {
       "status": "diagnostic_only",
       "input_photo_count": 23,
-      "registered_image_count": 3,
-      "largest_model_photo_coverage_percent": 13.0,
+      "registered_image_count": 20,
+      "largest_model_photo_coverage_percent": 87.0,
       "largest_model_room_ids": [
         "C01_lobby",
-        "R06_living_dining"
+        "R01_master_bedroom",
+        "R02_second_bedroom",
+        "R03_third_bedroom",
+        "R04_fourth_bedroom",
+        "R05_family_lounge",
+        "R06_living_dining",
+        "R07_kitchen"
       ],
       "is_metric_or_room_segmented": false
     },
-    "runtime_seconds": 45.868
+    "runtime_seconds": 92.984
   },
   "video_run": {
     "result": "C:\\Property Vision\\property-vision\\outputs\\video_room_segments_input_20261002T202712410589Z\\result.json",

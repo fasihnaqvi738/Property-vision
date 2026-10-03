@@ -7,6 +7,7 @@ from pathlib import Path
 
 import numpy as np
 import cv2
+from pipeline.ingest.arkitscenes import is_arkitscenes_raw_capture, load_arkitscenes_frames
 from pipeline.geometry.floor_returns import analyze_floor_returns
 from pipeline.geometry.render_review import render_geometry_review_svg
 from pipeline.geometry.wall_planes import analyze_wall_planes
@@ -245,20 +246,16 @@ def _polycam_directories(
     return depth_dir, image_dir, camera_dir, selected_mode
 
 
-def _read_polycam_rgb_frames(
-    image_dir: Path, target_ids: list[str], depth_width: int, depth_height: int,
+def _read_keyframe_rgb_frames(
+    image_files: dict[str, Path], target_ids: list[str], depth_width: int, depth_height: int,
     pose_mode: str,
 ) -> tuple[dict[str, np.ndarray], dict]:
-    image_files = {
-        path.stem: path for path in image_dir.iterdir()
-        if path.is_file() and path.suffix.lower() in {".jpg", ".jpeg", ".png"}
-    }
     resized = {}
     source_dimensions = None
     for frame_id in target_ids:
         image_path = image_files.get(frame_id)
         if image_path is None:
-            raise ValueError(f"Polycam RGB keyframe is missing for timestamp {frame_id}.")
+            raise ValueError(f"RGB keyframe is missing for frame {frame_id}.")
         bgr = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
         if bgr is None:
             raise ValueError(f"Could not read Polycam RGB keyframe: {image_path}")
@@ -276,7 +273,7 @@ def _read_polycam_rgb_frames(
         "matched_frames": len(resized),
         "rgb_image_dimensions": source_dimensions,
         "depth_dimensions": [depth_width, depth_height],
-        "temporal_match_method": "Exact shared keyframe timestamp in RGB, depth, and camera filenames.",
+        "temporal_match_method": "Matched keyframe IDs after dataset-specific timestamp alignment.",
         "pose_variant": pose_mode,
     }
 
@@ -301,21 +298,47 @@ def _write_ascii_ply(path: Path, points: np.ndarray, colors: np.ndarray) -> None
 
 
 def reconstruct_rgbd(capture_path: Path, output_dir: Path, *, pose_mode: str = "auto") -> dict:
-    """Back-project sparse depth samples from the supplied or Polycam RGB-D tier."""
+    """Back-project sparse depth samples from supplied, Polycam, or ARKitScenes RGB-D."""
     capture_path = Path(capture_path)
     output_dir.mkdir(parents=True, exist_ok=True)
     polycam = (capture_path / "keyframes" / "depth").is_dir()
+    arkitscenes = is_arkitscenes_raw_capture(capture_path)
+    confidence_files: dict[str, Path] = {}
+    image_files: dict[str, Path] = {}
     selected_pose_mode = "supplied"
-    if polycam:
+    if arkitscenes:
+        if pose_mode != "auto":
+            raise ValueError("--pose-mode raw/optimized applies only to Polycam LiDAR exports.")
+        arkit_frames, arkit_sync = load_arkitscenes_frames(capture_path)
+        frame_ids = [frame.frame_id for frame in arkit_frames]
+        depth_files = {frame.frame_id: frame.depth_path for frame in arkit_frames}
+        confidence_files = {frame.frame_id: frame.confidence_path for frame in arkit_frames}
+        image_files = {frame.frame_id: frame.rgb_path for frame in arkit_frames}
+        rows_by_frame = {
+            frame.frame_id: {
+                "width": frame.width,
+                "height": frame.height,
+                "fx": frame.fx,
+                "fy": frame.fy,
+                "cx": frame.cx,
+                "cy": frame.cy,
+                "rotation_camera_to_world": frame.rotation_camera_to_world,
+                "translation_camera_to_world_m": frame.translation_camera_to_world_m,
+            }
+            for frame in arkit_frames
+        }
+        source_format = "arkitscenes_raw_rgbd"
+        selected_pose_mode = "lowres_wide.traj"
+    elif polycam:
         depth_dir, image_dir, camera_dir, selected_pose_mode = _polycam_directories(capture_path, pose_mode)
         confidence_dir = capture_path / "keyframes" / "confidence"
         depth_files = {p.stem: p for p in depth_dir.glob("*.png")}
         camera_files = {p.stem: p for p in camera_dir.glob("*.json")}
         image_files = {
-            p.stem for p in image_dir.iterdir()
+            p.stem: p for p in image_dir.iterdir()
             if p.is_file() and p.suffix.lower() in {".jpg", ".jpeg", ".png"}
         }
-        frame_ids = sorted(set(depth_files) & set(camera_files) & image_files, key=_numeric_frame_sort)
+        frame_ids = sorted(set(depth_files) & set(camera_files) & set(image_files), key=_numeric_frame_sort)
         if not frame_ids:
             raise ValueError("Polycam export has no timestamps shared by depth, camera, and RGB keyframes.")
         rows_by_frame = {}
@@ -323,6 +346,7 @@ def reconstruct_rgbd(capture_path: Path, output_dir: Path, *, pose_mode: str = "
             with camera_files[frame_id].open(encoding="utf-8") as camera_file:
                 rows_by_frame[frame_id] = json.load(camera_file)
         rows = list(rows_by_frame.values())
+        confidence_files = {frame_id: confidence_dir / f"{frame_id}.png" for frame_id in frame_ids}
         source_format = "polycam_raw_lidar"
     else:
         rows = _read_odometry(capture_path / "odometry.csv")
@@ -331,6 +355,7 @@ def reconstruct_rgbd(capture_path: Path, output_dir: Path, *, pose_mode: str = "
         depth_files = {p.stem: p for p in depth_dir.glob("*.png")}
         rows_by_frame = {row["frame"].strip(): row for row in rows}
         frame_ids = sorted(set(depth_files) & set(rows_by_frame), key=_numeric_frame_sort)
+        confidence_files = {frame_id: confidence_dir / f"{frame_id}.png" for frame_id in frame_ids}
         source_format = "rgbd_bundle"
         if pose_mode != "auto":
             raise ValueError("--pose-mode raw/optimized applies only to Polycam LiDAR exports.")
@@ -346,10 +371,11 @@ def reconstruct_rgbd(capture_path: Path, output_dir: Path, *, pose_mode: str = "
     if first_depth is None or first_depth.ndim != 2:
         raise ValueError(f"Could not read a single-channel depth image: {depth_files[sampled_frame_ids[0]]}")
     depth_height, depth_width = first_depth.shape
-    if polycam:
-        rgb_frames, video_sync = _read_polycam_rgb_frames(
-            image_dir, sampled_frame_ids, depth_width, depth_height, selected_pose_mode
+    if polycam or arkitscenes:
+        rgb_frames, keyframe_sync = _read_keyframe_rgb_frames(
+            image_files, sampled_frame_ids, depth_width, depth_height, selected_pose_mode
         )
+        video_sync = {**(arkit_sync if arkitscenes else {}), **keyframe_sync}
     else:
         rgb_frames, video_sync = _read_synchronized_rgb_frames(
             capture_path / "rgb.mp4",
@@ -384,7 +410,9 @@ def reconstruct_rgbd(capture_path: Path, output_dir: Path, *, pose_mode: str = "
         v, u = np.mgrid[0:height:pixel_stride, 0:width:pixel_stride]
         z = depth[::pixel_stride, ::pixel_stride] * depth_scale_to_meters
         valid = np.isfinite(z) & (z > 0)
-        confidence_path = confidence_dir / f"{frame_id}.png"
+        confidence_path = confidence_files.get(frame_id)
+        if confidence_path is None:
+            confidence_path = confidence_dir / f"{frame_id}.png"
         if confidence_path.is_file():
             confidence = cv2.imread(str(confidence_path), cv2.IMREAD_UNCHANGED)
             if confidence is None:
@@ -393,10 +421,10 @@ def reconstruct_rgbd(capture_path: Path, output_dir: Path, *, pose_mode: str = "
             for value, count in zip(values, counts):
                 key = str(int(value))
                 confidence_histogram[key] = confidence_histogram.get(key, 0) + int(count)
-            if polycam:
+            if polycam or arkitscenes:
                 if confidence.shape != depth.shape:
-                    raise ValueError(f"Polycam confidence and depth dimensions differ for {frame_id}.")
-                # Polycam encodes low/medium/high confidence as 0/127/255.
+                    raise ValueError(f"RGB-D confidence and depth dimensions differ for {frame_id}.")
+                # Polycam encodes low/medium/high as 0/127/255; Apple uses 0/1/2.
                 valid &= confidence[::pixel_stride, ::pixel_stride] > 0
         if not np.any(valid):
             continue
@@ -406,7 +434,13 @@ def reconstruct_rgbd(capture_path: Path, output_dir: Path, *, pose_mode: str = "
             ((v[valid] - cy) * z[valid] / fy),
             z[valid],
         ))
-        if polycam:
+        if arkitscenes:
+            rotation = row["rotation_camera_to_world"]
+            translation = row["translation_camera_to_world_m"]
+            # ARKitScenes poses use ARKit axes (+x right, +y up, -z forward).
+            camera_points[:, 1] *= -1
+            camera_points[:, 2] *= -1
+        elif polycam:
             rotation = np.array([
                 [float(row[f"t_{i}{j}"]) for j in range(3)] for i in range(3)
             ], dtype=np.float64)
@@ -435,7 +469,7 @@ def reconstruct_rgbd(capture_path: Path, output_dir: Path, *, pose_mode: str = "
             points,
             np.asarray(pose_translations, dtype=np.float32),
             output_dir,
-            vertical_axis_override="y" if polycam else None,
+            vertical_axis_override="y" if (polycam or arkitscenes) else None,
         )
     except (ValueError, IOError, cv2.error) as error:
         floor_analysis = {
@@ -484,19 +518,23 @@ def reconstruct_rgbd(capture_path: Path, output_dir: Path, *, pose_mode: str = "
         "pixel_stride": pixel_stride,
         "point_count": int(len(points)),
         "colorization": {
-            "source": "keyframe images" if polycam else "rgb.mp4",
+            "source": "ARKitScenes lowres_wide frames" if arkitscenes else "keyframe images" if polycam else "rgb.mp4",
             "status": "colored",
             "pixel_alignment_assumption": "RGB and depth are registered to the same camera view; RGB is resized to the depth raster before per-pixel color lookup.",
             "synchronization": video_sync,
         },
         "depth_scale_to_meters": depth_scale_to_meters,
         "depth_unit_assumption": (
+            "ARKitScenes lowres_depth PNG is documented as 16-bit millimeters."
+            if arkitscenes else
             "Polycam raw depth PNG is documented as 16-bit millimeters."
             if polycam else
             "PNG values interpreted as millimeters; dataset documentation did not confirm units."
         ),
         "camera_intrinsics": "Per-frame RGB-camera intrinsics scaled to the matching depth raster dimensions.",
         "pose_convention_assumption": (
+            "ARKitScenes lowres_wide.traj axis-angle and translation interpreted as camera-to-world in ARKit axes; this convention is not independently verified against a registered reference scan."
+            if arkitscenes else
             f"Polycam {selected_pose_mode} row-major camera-to-world pose; ARKit axes (+Y up, -Z forward) converted from CV back-projection axes."
             if polycam else
             "CSV quaternion (qx,qy,qz,qw) and translation interpreted as camera-to-world, using standard right-handed quaternion rotation."
@@ -509,11 +547,15 @@ def reconstruct_rgbd(capture_path: Path, output_dir: Path, *, pose_mode: str = "
         "geometry_review_svg": geometry_review_svg_path.name,
         "limitations": [
             (
+                "ARKitScenes trajectories are sparsely sampled and paired with nearest-timestamp RGB, depth, confidence, and intrinsics; the source convention and registration still require validation against the paired FARO scan."
+                if arkitscenes else
                 "Polycam depth units, ARKit pose convention, and axis conversion follow the published raw-data specification but still need validation against independent ground truth."
                 if polycam else
                 "Depth units and pose convention are assumptions and need validation against dataset documentation or a known dimension."
             ),
             (
+                "ARKitScenes RGB/depth/confidence/pose frame matches use nearest timestamps with a 50 ms maximum offset; see colorization.synchronization for observed offsets."
+                if arkitscenes else
                 "Polycam RGB, depth, and camera records are joined by their shared keyframe timestamp; corrected poses/images are used when both corrected folders exist."
                 if polycam else
                 "RGB/depth pixel registration and the shared stream start time are inferred from matching aspect ratios, intrinsics, and nearly equal stream durations; they have not been independently ground-truthed."

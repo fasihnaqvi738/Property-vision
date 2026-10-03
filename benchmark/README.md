@@ -2,6 +2,18 @@
 
 The benchmark needs measured truth and saved pipeline outputs. Do not guess values or copy a model prediction into ground truth. The supplied `ground_truth.template.json` is a starter manifest, not data; duplicate it as `ground_truth.json` and fill it after collecting the evidence below. Use `capture_log.template.csv` to record each original sensor capture, and `raw_measurements.template.csv` to preserve tape/laser readings and room connections.
 
+## Optional external LiDAR depth check
+
+The Apple ARKitScenes downloader retrieves one public iPad Pro scan with raw RGB-D and the dataset's FARO-projected high-resolution depth reference. This provides a per-pixel sensor-depth comparison, not any of the room-dimension or whole-property gates. The media is downloaded only into ignored `captures/`; do not force-add or redistribute it. Review the [official data instructions](https://github.com/apple/ARKitScenes/blob/main/DATA.md) and [terms](https://github.com/apple/ARKitScenes/blob/main/LICENSE).
+
+```powershell
+python -m pipeline.evaluation.download_arkitscenes_sample --output-dir "captures\_public_arkitscenes"
+python main.py "captures\_public_arkitscenes\raw\Training\42445884" --output-dir "outputs\arkitscenes_public_sample"
+python -m pipeline.evaluation.evaluate_arkitscenes_depth "captures\_public_arkitscenes\raw\Training\42445884" --output "outputs\arkitscenes_public_sample\arkitscenes_depth_evaluation.json"
+```
+
+The saved depth report is diagnostic external-data evidence. It does not establish the iPhone walk-in, room layout, metric wall lengths, ceiling heights, opening detection, calibrated confidence intervals, or the official LiDAR plan gate.
+
 ## Compare a plan with the Apartment reference drawing
 
 For the currently available Apartment case, compare the traced reference annotation with a candidate GeoJSON in the same source-image pixel coordinate frame:
@@ -13,7 +25,17 @@ python -m pipeline.evaluation.evaluate_plan_against_reference `
   --output outputs/apartment_case_01/stitched_plan/plan_benchmark.json
 ```
 
-The report includes space-ID precision/recall, per-space and aggregate raster IoU, overlap pairs, adjacency precision/recall/F1, consistency of printed dimension labels, and an inventory of available floor-plan/photo/video/LiDAR sources with saved photo/video reconstruction coverage. The current GeoJSON is itself a manual trace of this drawing, so its score is a self-consistency check; it is not evidence that photos/video inferred the layout. Printed dimensions are copied from the plan and are not independent metric truth. The evaluator refuses mismatched coordinate frames instead of silently comparing unrelated coordinates.
+The report includes space-ID precision/recall, per-space and aggregate raster IoU, overlap pairs, adjacency precision/recall/F1, consistency of printed dimension labels, and an inventory of available floor-plan/photo/video/LiDAR sources with saved photo/video reconstruction coverage. The printed room dimensions are treated as authoritative scoring targets for this apartment per user instruction. The current GeoJSON is itself a manual trace of this drawing, so its score is a self-consistency check; it is not evidence that photos/video inferred the layout. No physical tape/laser cross-check exists, and these labels do not generalize to the unseen walk-in property. The evaluator refuses mismatched coordinate frames instead of silently comparing unrelated coordinates.
+
+Check whether the traced polygons can be converted from drawing pixels to metric coordinates using one global scale:
+
+```powershell
+python -m pipeline.evaluation.audit_reference_plan_scale `
+  captures/apartment_case_01/reference_plan.json `
+  --output outputs/apartment_case_01/stitched_plan/plan_scale_audit.json
+```
+
+The audit fits both one uniform pixel-per-metre scale and separate X/Y scales, while allowing a 90-degree swap of each room's printed dimensions. The current 11-space trace still has a 27.6% RMS dimension residual under its best axis-aligned global fit, so the room polygons remain in pixel coordinates. This does not invalidate the printed dimensions as per-room targets; it shows that the hand-traced drawing geometry cannot safely be scaled into a metric property plan.
 
 ## Collect the required evidence
 
