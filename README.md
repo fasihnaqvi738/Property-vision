@@ -48,6 +48,8 @@ python main.py "captures\walkthrough.mp4"
 python main.py "captures\property_videos"
 ```
 
+For an iPhone 15 or newer, set **Settings → Camera → Formats → Most Compatible** before recording and keep Apple ProRes off; Apple documents that new videos then use H.264, which reduces codec uncertainty on the Windows handoff. The pipeline accepts `.mov` and `.mp4`. See the [one-page capture protocol](docs/one_page_capture_protocol.md) for the exact walk and file layout.
+
 For a multi-room folder, put one clip per room directly in the folder or one level down in folders named by room ID. The command returns one JSON result with separate sparse reconstructions for each clip; it does not align camera poses between clips or stitch a property plan. Each clip is sampled approximately four frames per second (up to 160 frames), saves selected frames and a contact sheet, then sends those frames through COLMAP sparse reconstruction with sequential matching. If the cap is reached, samples are spread across the complete clip and the result reports the effective rate and clip coverage. The result uses the shared JSON envelope with `capture.tier` set to `video`. This is sparse monocular reconstruction with arbitrary scale; it does not yet produce dimensioned rooms, classified openings, drift correction, or calibrated uncertainty.
 
 Video results report `video_reconstruction_quality` in the result summary: sampled-frame count, model count, largest-model coverage, and per-model registration memberships. Multiple models trigger a limitation warning because the selected primary point cloud may cover only part of the walkthrough.
@@ -97,7 +99,7 @@ python -m pipeline.evaluation.evaluate_arkitscenes_depth "captures\_public_arkit
 python -m pipeline.validation "outputs\arkitscenes_public_sample"
 ```
 
-The downloader records source URLs and SHA-256 hashes in the ignored capture folder. On the development workstation, Property Vision processed 78,343 points in 3.267 s; the separate depth evaluator matched 40 frame pairs and 350,043 valid pixels (2.18 cm MAE; 93.293% within 5 cm). This is iPad Pro sensor-depth evidence, not iPhone evidence or a room-dimension/whole-property-plan gate. Review the dataset terms before use; the media is not bundled or redistributed.
+The downloader records source URLs and SHA-256 hashes in the ignored capture folder. A fresh replay on the development workstation processed 78,343 points in 3.281 s; the separate depth evaluator matched 40 frame pairs and 350,043 valid pixels (2.18 cm MAE; 93.293% within 5 cm). This is iPad Pro sensor-depth evidence, not iPhone evidence or a room-dimension/whole-property-plan gate. Review the dataset terms before use; the media is not bundled or redistributed.
 
 To create a drift-handling ablation from the same extracted capture, run it twice:
 

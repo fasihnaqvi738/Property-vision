@@ -5,6 +5,7 @@ Follow this card on the **same property** for whichever tier the assessment requ
 ## Before the visit
 
 - Install the repository's pinned Python dependencies once: `python -m pip install -r requirements.txt`.
+- On the iPhone, set **Settings → Camera → Formats → Most Compatible** before collecting photos or video, and keep Apple ProRes off. New media is saved as JPEG/H.264 for broad handoff compatibility; see [Apple's format guide](https://support.apple.com/en-au/116944) and [ProRes settings](https://support.apple.com/en-au/109041).
 - Label at least three rooms `R01`–`R03` and one connecting hall/landing `C01`.
 - For the LiDAR tier, use a **Pro-class iPhone**, install Polycam, and [enable Developer Mode](https://learn.poly.cam/hc/en-us/articles/34295907278996-How-to-Access-Developer-Mode) **before capturing**. Export Raw Data on the same phone that made the capture; Developer Mode does not apply retroactively.
 - Choose one furnished room for two staged damage examples from two classes. Keep the damage in place for every tier and photograph each example close-up and in room context.
@@ -12,9 +13,9 @@ Follow this card on the **same property** for whichever tier the assessment requ
 
 ## Capture slowly
 
-**Photos — stock iPhone Camera, iPhone 15 or newer:** Set Camera → Formats → **Most Compatible** for JPEG (HEIC/HEIF is also accepted). Take **2–8 sharp photos per room**, walking the perimeter with about one-third overlap. Include corners and the doorway; photograph each connector from both ends. Avoid zoom, portrait mode, blur, fast movement, and blocked lenses.
+**Photos — stock iPhone Camera, iPhone 15 or newer:** Take **2–8 sharp photos per room**, walking the perimeter with about one-third overlap. Include corners and the doorway; photograph each connector from both ends. Avoid zoom, portrait mode, blur, fast movement, and blocked lenses. HEIC/HEIF is also accepted if you do not change the camera format.
 
-**Video — stock iPhone Camera, iPhone 15 or newer:** Record **one 30–60 second landscape clip per room at 30 fps**. Start at the doorway, pause, walk slowly around the room with floor and walls visible, and finish facing the doorway. Record each connector separately. Do not edit, trim, or send through an app that recompresses the file.
+**Video — stock iPhone Camera, iPhone 15 or newer:** With ProRes off, record **one 30–60 second landscape clip per room at 30 fps**. Most Compatible records H.264 video, which reduces codec uncertainty for the Windows pipeline. Start at the doorway, pause, walk slowly around the room with floor and walls visible, and finish facing the doorway. Record each connector separately. Do not edit, trim, or send through an app that recompresses the file.
 
 **LiDAR — Polycam on a Pro-class iPhone:** Select Space/LiDAR capture and export **Raw Data**. Walk slowly around each room perimeter and through the doorway; scan the connector from both sides. Keep both the original export ZIP and the extracted folder.
 
