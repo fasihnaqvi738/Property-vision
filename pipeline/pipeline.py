@@ -7,6 +7,7 @@ from time import perf_counter
 from pipeline.ingest.capture import load_capture
 from pipeline.ingest.types import CaptureType
 from pipeline.ingest.rgbd import reconstruct_rgbd
+from pipeline.ingest.photo import PHOTO_EXTENSIONS, discover_photos, stage_photo_images
 from pipeline.ingest.video import sample_walkthrough_video
 from pipeline.results import build_result
 from pipeline.validation import validate_result
@@ -118,9 +119,17 @@ def _video_collection_inputs(capture_root: Path, video_paths: list[Path]) -> lis
     return sorted(mappings)
 
 
-def run_pipeline(input_path: str, output_root: str = "outputs", *, pose_mode: str = "auto") -> Path:
+def run_pipeline(
+    input_path: str,
+    output_root: str = "outputs",
+    *,
+    pose_mode: str = "auto",
+    device: str | None = None,
+) -> Path:
     started_at = perf_counter()
     capture = load_capture(input_path)
+    if device and device.strip():
+        capture.metadata.device = device.strip()
     if capture.capture_type is CaptureType.RGBD:
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
         run_dir = Path(output_root) / f"{capture.path.name}_{timestamp}"
@@ -367,14 +376,11 @@ def run_pipeline(input_path: str, output_root: str = "outputs", *, pose_mode: st
 
     from pipeline.reconstruction.colmap import reconstruct_from_images
 
-    photo_files = sorted(
-        path for path in capture.path.iterdir()
-        if path.is_file() and path.suffix.lower() in {".jpg", ".jpeg", ".png"}
-    )
+    photo_files = discover_photos(capture.path)
     room_folders = sorted(
         folder for folder in capture.path.iterdir()
         if folder.is_dir() and any(
-            file.is_file() and file.suffix.lower() in {".jpg", ".jpeg", ".png"}
+            file.is_file() and file.suffix.lower() in PHOTO_EXTENSIONS
             for file in folder.iterdir()
         )
     )
@@ -390,11 +396,11 @@ def run_pipeline(input_path: str, output_root: str = "outputs", *, pose_mode: st
         for folder in room_folders:
             images = sorted(
                 file for file in folder.iterdir()
-                if file.is_file() and file.suffix.lower() in {".jpg", ".jpeg", ".png"}
+                if file.is_file() and file.suffix.lower() in PHOTO_EXTENSIONS
             )
             if not 2 <= len(images) <= 8:
                 raise ValueError(
-                    f"Room folder {folder.name!r} must contain 2 to 8 JPEG/PNG stills; found {len(images)}."
+                    f"Room folder {folder.name!r} must contain 2 to 8 JPEG, PNG, or HEIC/HEIF stills; found {len(images)}."
                 )
             room_inputs.append((folder.name, folder, images))
 
@@ -404,14 +410,19 @@ def run_pipeline(input_path: str, output_root: str = "outputs", *, pose_mode: st
         per_room = []
         plan_rooms = []
         all_input_files = []
+        staged_room_inputs = []
         for room_id, folder, images in room_inputs:
             room_error = None
             try:
+                staged_images = stage_photo_images(
+                    images, run_dir / "photo_frames" / room_id
+                )
+                staged_room_inputs.append((room_id, staged_images))
                 models = reconstruct_from_images(
-                    folder, run_dir / "reconstruction" / room_id,
+                    staged_images[0].parent, run_dir / "reconstruction" / room_id,
                     **reconstruction_settings,
                 )
-            except RuntimeError as error:
+            except (RuntimeError, ValueError, OSError) as error:
                 # A weak room must not discard useful results from the other
                 # rooms or prevent the cross-room matching diagnostic.
                 models = []
@@ -443,7 +454,7 @@ def run_pipeline(input_path: str, output_root: str = "outputs", *, pose_mode: st
         # metrically scaled stitched floor plan.
         joint_image_dir = run_dir / "property_photo_frames"
         joint_image_dir.mkdir(parents=True, exist_ok=False)
-        for room_id, _, images in room_inputs:
+        for room_id, images in staged_room_inputs:
             for image in images:
                 shutil.copy2(image, joint_image_dir / f"{room_id}__{image.name}")
         joint_models = []
@@ -455,7 +466,7 @@ def run_pipeline(input_path: str, output_root: str = "outputs", *, pose_mode: st
                 num_threads=4,
                 matching_strategy="exhaustive",
             )
-        except RuntimeError as error:
+        except (RuntimeError, ValueError, OSError) as error:
             # Per-room results remain useful when views cannot form a joint
             # view graph; expose the failed stitch attempt in the result.
             joint_error = str(error)
@@ -626,14 +637,15 @@ def run_pipeline(input_path: str, output_root: str = "outputs", *, pose_mode: st
 
     if not photo_files:
         raise ValueError(
-            f"No JPEG/PNG photos found directly in {capture.path} or in its immediate room subfolders."
+            f"No JPEG, PNG, HEIC, or HEIF photos found directly in {capture.path} or in its immediate room subfolders."
         )
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     run_dir = Path(output_root) / f"{capture.path.name}_{timestamp}"
     reconstruction_settings = {"num_threads": 4}
+    staged_images = stage_photo_images(photo_files, run_dir / "photo_frames")
     models = reconstruct_from_images(
-        capture.path, run_dir / "reconstruction", **reconstruction_settings
+        staged_images[0].parent, run_dir / "reconstruction", **reconstruction_settings
     )
     primary_model = max(
         models,

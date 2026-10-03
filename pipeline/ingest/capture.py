@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from pathlib import Path
-from pipeline.ingest.photo import load_photos, normalize_photos
 from pipeline.ingest.types import CaptureType
 from pipeline.ingest.detector import detect_capture_type
 from pipeline.ingest.metadata import CaptureMetadata
@@ -20,13 +19,11 @@ def load_capture(input_path: str) -> Capture:
     path = Path(input_path)
     capture_type = detect_capture_type(input_path)
 
+    # Keep capture loading lightweight. iPhone stills can be 48 MP; decode and
+    # validate them one at a time during staging instead of retaining every
+    # full-resolution frame in memory before reconstruction starts.
     photos = []
-
-    if capture_type == CaptureType.PHOTO:
-        photos = load_photos(path)
-        normalized = normalize_photos(path, photos)
-    else:
-        normalized = None
+    normalized = None
 
     metadata = CaptureMetadata(
         device="unknown",

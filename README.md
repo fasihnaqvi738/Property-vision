@@ -4,7 +4,7 @@ An early computer-vision prototype for reconstructing a sparse 3D scene from roo
 
 ## Current photo workflow
 
-For one room, use a folder containing at least two overlapping JPEG or PNG images directly inside it. For multiple rooms, use a collection root with one immediate subfolder per room, each containing 2–8 stills. The multi-room input reconstructs each room separately in one command; it does not yet produce the required stitched floor plan. Photos should overlap, be sharp, and show textured surfaces from different viewpoints. A single photo cannot recover 3D geometry.
+For one room, use a folder containing at least two overlapping JPEG, PNG, HEIC, or HEIF images directly inside it. For multiple rooms, use a collection root with one immediate subfolder per room, each containing 2–8 stills. The multi-room input reconstructs each room separately in one command; it does not yet produce the required stitched floor plan. Photos should overlap, be sharp, and show textured surfaces from different viewpoints. A single photo cannot recover 3D geometry. HEIC/HEIF photos are decoded and staged as JPEG for COLMAP; originals are preserved.
 
 ### Setup (Windows PowerShell)
 
@@ -35,7 +35,7 @@ For per-room photo folders, pass their common parent directory:
 python main.py "C:\captures\property-photos"
 ```
 
-The root must contain at least two immediate room folders, for example `R01\`, `R02\`, and `C01\`; each must contain 2–8 JPEG/PNG stills directly inside it. One result includes the independent reconstruction for each room and a joint COLMAP reconstruction attempt across all images, with room-folder membership reported for connected models. A weak per-room reconstruction is recorded as a room-level error rather than aborting the complete collection. The SVG pose review shows registered camera-center centroids and shared-model links in arbitrary SfM coordinates. It does not establish room boundaries, metric scale, gravity alignment, dimensions, adjacency, overlaps, or the homeowner-ready stitch.
+The root must contain at least two immediate room folders, for example `R01\`, `R02\`, and `C01\`; each must contain 2–8 JPEG, PNG, HEIC, or HEIF stills directly inside it. One result includes the independent reconstruction for each room and a joint COLMAP reconstruction attempt across all images, with room-folder membership reported for connected models. A weak per-room reconstruction is recorded as a room-level error rather than aborting the complete collection. The SVG pose review shows registered camera-center centroids and shared-model links in arbitrary SfM coordinates. It does not establish room boundaries, metric scale, gravity alignment, dimensions, adjacency, overlaps, or the homeowner-ready stitch. Add `--device "iPhone 16 Pro | iOS 19 | Camera"` to record the actual device/software identity in the result.
 
 Photo reconstruction limits COLMAP to four CPU threads to keep feature extraction more predictable on high-resolution images. The setting is recorded under `reconstruction.summary.reconstruction_settings` in each result.
 
@@ -103,7 +103,7 @@ python -m pipeline.validation outputs\some_run\result.json
 
 Until room extraction and calibration are implemented, unsupported plan and measurement fields are explicitly marked unavailable. The requirement-by-requirement status is tracked in `docs/compliance_matrix.md`.
 
-The repeatable field procedure for matching room IDs across photo, video, LiDAR, staged-damage, and ground-truth captures is in [`docs/capture_protocol.md`](docs/capture_protocol.md). Extracted Polycam raw-data folders are supported; the ZIP itself must be extracted before running the pipeline.
+The repeatable field procedure for matching room IDs across photo, video, LiDAR, staged-damage, and ground-truth captures is in [`docs/capture_protocol.md`](docs/capture_protocol.md). Extracted Polycam raw-data folders are supported; the ZIP itself must be extracted before running the pipeline. The printable one-page stock capture card is [`docs/one_page_capture_protocol.md`](docs/one_page_capture_protocol.md).
 
 ## Ground-truth benchmark scoring
 

@@ -27,7 +27,7 @@ def detect_capture_type(input_path: str) -> CaptureType:
         return CaptureType.RGBD
 
     video_extensions = {".mp4", ".mov", ".m4v", ".avi"}
-    photo_extensions = {".jpg", ".jpeg", ".png", ".heic"}
+    photo_extensions = {".jpg", ".jpeg", ".png", ".heic", ".heif"}
     lidar_extensions = {".ply", ".las", ".e57"}
     if path.is_file():
         extension = path.suffix.lower()

@@ -28,6 +28,10 @@ def main() -> None:
         help="Polycam LiDAR pose source; auto prefers corrected poses, or choose raw/optimized for comparison.",
     )
     parser.add_argument(
+        "--device",
+        help="Optional device, OS, and capture-app identity saved in result.json (example: 'iPhone 16 Pro | iOS 19 | Polycam 6').",
+    )
+    parser.add_argument(
         "--assessment-json",
         type=Path,
         help="Optional human-reviewed damage/flag/scope sidecar JSON to apply after reconstruction.",
@@ -54,7 +58,9 @@ def main() -> None:
         print(f"Prepared room-specific video clips: {manifest_path}")
         capture_input = str(segmented_input)
 
-    result_path = run_pipeline(capture_input, args.output_dir, pose_mode=args.pose_mode)
+    result_path = run_pipeline(
+        capture_input, args.output_dir, pose_mode=args.pose_mode, device=args.device
+    )
     if args.assessment_json:
         result_path = apply_assessment(result_path, args.assessment_json)
     print(f"Result: {result_path}")
