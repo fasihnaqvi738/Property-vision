@@ -2,6 +2,19 @@
 
 The benchmark needs measured truth and saved pipeline outputs. Do not guess values or copy a model prediction into ground truth. The supplied `ground_truth.template.json` is a starter manifest, not data; duplicate it as `ground_truth.json` and fill it after collecting the evidence below. Use `capture_log.template.csv` to record each original sensor capture, and `raw_measurements.template.csv` to preserve tape/laser readings and room connections.
 
+## Compare a plan with the Apartment reference drawing
+
+For the currently available Apartment case, compare the traced reference annotation with a candidate GeoJSON in the same source-image pixel coordinate frame:
+
+```powershell
+python -m pipeline.evaluation.evaluate_plan_against_reference `
+  captures/apartment_case_01/reference_plan.json `
+  outputs/apartment_case_01/stitched_plan/stitched_reference_plan.geojson `
+  --output outputs/apartment_case_01/stitched_plan/plan_benchmark.json
+```
+
+The report includes space-ID precision/recall, per-space and aggregate raster IoU, overlap pairs, adjacency precision/recall/F1, consistency of printed dimension labels, and an inventory of available floor-plan/photo/video/LiDAR sources with saved photo/video reconstruction coverage. The current GeoJSON is itself a manual trace of this drawing, so its score is a self-consistency check; it is not evidence that photos/video inferred the layout. Printed dimensions are copied from the plan and are not independent metric truth. The evaluator refuses mismatched coordinate frames instead of silently comparing unrelated coordinates.
+
 ## Collect the required evidence
 
 1. Capture at least three rooms and one connecting hall. Use the same room IDs for photo, video, and LiDAR captures. For the LiDAR tier, run `main.py` once per extracted Polycam room export. Repeat at least one room at the same tier in a fresh session.
