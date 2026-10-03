@@ -109,6 +109,7 @@ def build_result(
                 "adjacency": [],
                 "footprint": _unavailable_measurement("m^2", "Room footprints have not been extracted."),
                 "overlaps": [],
+                "candidate_footprints": [],
             },
         },
         "damage_regions": [],

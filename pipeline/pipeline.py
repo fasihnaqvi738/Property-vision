@@ -14,6 +14,10 @@ from pipeline.ingest.photo import (
     stage_photo_images,
 )
 from pipeline.ingest.video import sample_walkthrough_video
+from pipeline.geometry.stitch_metric_rooms import (
+    stitch_metric_room_candidates,
+    write_scan_stitch_artifacts,
+)
 from pipeline.results import build_result
 from pipeline.validation import validate_result
 
@@ -208,6 +212,17 @@ def run_pipeline(
                 else []
             ),
         )
+        metric_candidates = result["property_plan"].get("boundary_hypotheses", [])
+        result["property_plan"]["stitched_plan"] = stitch_metric_room_candidates(metric_candidates)
+        if metric_candidates:
+            result["property_plan"]["status"] = "partial"
+            result["limitations"].append(
+                "Scan-derived stitched geometry is a review-only metric candidate layout from one supplied pose frame. Room identities, scan scale, completeness, and doorway adjacency are not ground-truth validated."
+            )
+        stitched_geojson, stitched_svg = write_scan_stitch_artifacts(
+            result["property_plan"]["stitched_plan"], run_dir
+        )
+        result["artifacts"]["debug_views"].extend([str(stitched_geojson), str(stitched_svg)])
         return _write_result(result, run_dir / "result.json", started_at)
 
     if capture.capture_type is CaptureType.VIDEO:

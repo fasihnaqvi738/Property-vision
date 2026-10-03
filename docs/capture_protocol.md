@@ -1,6 +1,6 @@
 # Property Vision capture protocol
 
-**Capture route:** stock iPhone Camera for photo/video; Polycam Space (LiDAR) Raw Data on a Pro-class iPhone. Install Polycam from the App Store before the visit. The pipeline runs locally; it does not upload captures.
+**Capture route:** stock iPhone Camera for photo/video; Polycam Space (LiDAR) Raw Data on a Pro-class iPhone. Install Polycam from the App Store before the visit. Photo/video/RGB-D reconstruction runs locally. The optional Roboflow damage-classification workflow uploads the selected damage photos to its hosted service; see the [README API and privacy instructions](../README.md#automated-damage-classification-and-scope-takeoff) before using it.
 
 ## Prepare the property
 
@@ -27,6 +27,8 @@ python main.py "captures\property_lidar\R01" # run once for each extracted room 
 ```
 
 The photo pipeline records camera make/model from EXIF when available; it does not infer iOS or app versions. HEIC/HEIF staging applies EXIF orientation and retains camera/focal metadata for reconstruction while stripping GPS from the staged derivative; original files stay unchanged. Add `--device "iPhone 16 Pro | iOS 19 | Polycam 6"` (substitute the actual model and versions) to override that with the known hardware/software identity in each result JSON. The capture log template remains the source of full per-room and measurement metadata.
+
+For optional automated visible-damage proposals and preliminary scope quantities, configure `ROBOFLOW_API_KEY` and follow the README's Roboflow workflow. Only photos explicitly submitted to that command are uploaded. Bounding-box quantities are review proxies, not measured repair scope; concealed-damage flags still require human evidence and rules.
 
 Run the LiDAR command once per room/connector export. Keep every timestamped `outputs\...\result.json`. Add real measurements and result paths to `benchmark\ground_truth.json`, then run `python pipeline\evaluation\benchmark.py benchmark\ground_truth.json`.
 

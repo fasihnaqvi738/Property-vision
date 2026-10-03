@@ -4,7 +4,7 @@ Follow this card on the **same property** for whichever tier the assessment requ
 
 ## Before the visit
 
-- Install the repository's pinned Python dependencies once: `python -m pip install -r requirements.txt`.
+- From the repository folder, set up once with 64-bit Python 3.12: `py -3.12 -m venv .venv`, then `.\.venv\Scripts\Activate.ps1`, then `python -m pip install -r requirements.txt`.
 - On the iPhone, set **Settings → Camera → Formats → Most Compatible** before collecting photos or video, and keep Apple ProRes off. New media is saved as JPEG/H.264 for broad handoff compatibility; see [Apple's format guide](https://support.apple.com/en-au/116944) and [ProRes settings](https://support.apple.com/en-au/109041).
 - Label at least three rooms `R01`–`R03` and one connecting hall/landing `C01`.
 - For the LiDAR tier, use a **Pro-class iPhone**, install Polycam, and [enable Developer Mode](https://learn.poly.cam/hc/en-us/articles/34295907278996-How-to-Access-Developer-Mode) **before capturing**. Export Raw Data on the same phone that made the capture; Developer Mode does not apply retroactively.
@@ -29,4 +29,4 @@ python main.py "captures\property_videos" --device "iPhone model | iOS version |
 python main.py "captures\property_lidar\R01" --device "iPhone model | iOS version | Polycam version"
 ```
 
-Run the LiDAR command once for each extracted room/connector export. Retain every `outputs\...\result.json`, the original sensor files, the completed capture log, raw measurement CSV, and damage labels. The current prototype writes schema-validated diagnostic results, but its scan-derived stitched plan and accuracy gates are not yet verified; do not substitute its output for the measured ground truth.
+Run the LiDAR command once for each extracted room/connector export. When a command finishes, note the printed `Result:` path; `result.json` is the run summary. Retain every result, the original sensor files, the completed capture log, raw measurement CSV, and damage labels. Property Vision writes schema-validated results and diagnostic scan-derived plan candidates; these candidates are not survey-verified ground truth. For optional hosted damage classification, use the Roboflow steps in the README after capture. That workflow uploads selected photos to Roboflow and requires a private API key.

@@ -81,7 +81,12 @@
               }
             },
             "footprint": { "$ref": "#/$defs/measurement" },
-            "overlaps": { "type": "array", "items": { "type": "object" } }
+            "overlaps": { "type": "array", "items": { "type": "object" } },
+            "candidate_footprints": {
+              "type": "array",
+              "description": "Review-only metric room-shaped polygons from a shared scan frame; overlap-excluded and invalid candidates remain visible.",
+              "items": { "$ref": "#/$defs/scanFootprintCandidate" }
+            }
           }
         }
       }
@@ -293,6 +298,18 @@
         "ceiling_height": { "$ref": "#/$defs/measurement" },
         "opening_detection_status": { "$ref": "#/$defs/status" },
         "supporting_wall_candidate_ids": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "scanFootprintCandidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidate_id", "vertices_xy_m", "area_m2", "status"],
+      "properties": {
+        "candidate_id": { "type": "string", "minLength": 1 },
+        "vertices_xy_m": { "type": "array", "items": { "$ref": "#/$defs/point2" } },
+        "area_m2": { "type": ["number", "null"], "minimum": 0 },
+        "status": { "enum": ["included_candidate", "excluded_overlap", "invalid"] },
+        "reason": { "type": "string" }
       }
     },
     "point2": {

@@ -1,6 +1,17 @@
 # Property Vision
 
-An early computer-vision prototype for reconstructing a sparse 3D scene from room photos, walkthrough videos, or RGB-D captures.
+Property Vision processes room photos, walkthrough videos, and RGB-D/LiDAR captures into reconstruction artifacts, scan-derived plan candidates, and optional damage-assessment sidecars.
+
+For a simple Windows setup and capture handoff, start with the [one-page capture protocol](docs/one_page_capture_protocol.md).
+
+## Start here
+
+1. Complete [Windows setup](#setup-windows-powershell) once from the repository folder.
+2. Prepare and label the capture folders using the [one-page capture protocol](docs/one_page_capture_protocol.md). Use the [full capture protocol](docs/capture_protocol.md) for the detailed folder layout and measurement log.
+3. Run the matching workflow below: [photos](#current-photo-workflow), [video](#walkthrough-video-workflow), or [RGB-D/LiDAR](#rgb-d-capture-workflow). For reviewed room segments from one video, use the [multi-room video command](#supplied-dimensioned-apartment-plan).
+4. After each run, follow the printed `Result:` path to `result.json`. Validate it with `python -m pipeline.validation "outputs\\<run>\\result.json"`.
+5. For scored results, follow the [benchmark guide](benchmark/README.md) to fill the measurement manifest and run the evaluator. For automated visible-damage detections and preliminary quantities, use the [damage and takeoff workflow](#automated-damage-classification-and-scope-takeoff).
+6. Check the [compliance matrix](docs/compliance_matrix.md) and [benchmark report](docs/benchmark_report.md) for the current implementation and evidence status.
 
 ## Current photo workflow
 
@@ -8,10 +19,10 @@ For one room, use a folder containing at least two overlapping JPEG, PNG, HEIC, 
 
 ### Setup (Windows PowerShell)
 
-Use 64-bit Python 3.13, then run these commands from the repository root:
+Use 64-bit Python 3.12 (the latest replay was run on Python 3.12.14), then run these commands from the repository root:
 
 ```powershell
-py -3.13 -m venv .venv
+py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
@@ -62,7 +73,7 @@ Each run creates a timestamped folder under `outputs` (or the selected output di
 - `reconstruction\database.db`: COLMAP feature and match database used for the run.
 - For video runs: sampled `video_frames\`, `video_sample_contact_sheet.png`, and `video_sampling.json`.
 
-Photo and video models have arbitrary scale. These workflows do not yet produce a dimensioned room plan or report walls, openings, room area, damage, or confidence intervals. Standalone point-cloud and HEIC ingestion are not implemented. Each run writes to a new folder, so previous results are retained.
+Photo and video models have arbitrary scale and do not place rooms into a measured property plan. RGB-D scan boundary polygons can now be stitched into an overlap-checked diagnostic candidate layout; accepted room dimensions and multi-room scan accuracy are still unverified. Damage detection is an optional hosted-image workflow described below. Standalone point-cloud ingestion is not implemented. Each capture run writes to a new folder, so previous results are retained.
 
 ## RGB-D capture workflow
 
@@ -111,9 +122,9 @@ python pipeline\evaluation\drift_ablation.py --raw "outputs\<raw-run>\result.jso
 
 The evaluator requires results from the same capture path and reports diagnostic changes in observed floor coverage, pose translation spans, wall alignment, and geometry candidate counts. It does not establish accuracy or that optimized poses are better; that requires independent measured ground truth. The default report is written beside the optimized run as `drift_ablation.json`.
 
-This creates a colored `rgbd_point_cloud.ply`, `floor_return_preview.png`, `wall_plane_candidates.png`, and `wall_boundary_diagnostic.png`, and writes `result.json` in a timestamped output folder. The output records `reconstruction.summary.processing_runtime_seconds`, measured from capture type detection through reconstruction and artifact generation (excluding result JSON writing). The export samples every tenth pose/depth frame and every fourth pixel. The supplied bundle matches RGB presentation timestamps to depth odometry timestamps; Polycam joins exact shared keyframe IDs; ARKitScenes joins its sparse trajectory to the nearest RGB/depth/confidence/intrinsics frames and records offsets. The floor preview outlines the largest connected area of observed floor returns and records its polygon and observed-cell area. The wall pass suppresses overlapping near-coplanar detections, compares candidate spans with nearby floor-outline support, and reports snapped endpoint cycles, line-intersection face hypotheses, provisional edge lengths, interior angles, and nearby unclosed endpoint gaps. It also screens internal wall voids and boundary gaps for possible openings, while leaving every finding unverified. The geometry review checks whether each face is simple, supported, and room-shaped under provisional thresholds. These are still diagnostics, not room labels, identified doors/windows, or calibrated room measurements: observed floor coverage is not the room footprint, an aligned candidate is not a verified wall, and a closed face is not proof of a room. Provisional edge lengths and areas have no calibrated confidence intervals. The pipeline treats depth values as millimeters, poses as camera-to-world transforms, and the least-varying camera-motion axis as vertical; validate these against capture documentation and ground truth. It does not yet create an accepted floor plan or calibrated room measurements.
+This creates a colored `rgbd_point_cloud.ply`, `floor_return_preview.png`, `wall_plane_candidates.png`, `wall_boundary_diagnostic.png`, and scan-derived stitched-plan review artifacts. The output records `reconstruction.summary.processing_runtime_seconds`, measured from capture type detection through reconstruction and artifact generation (excluding result JSON writing). The export samples every tenth pose/depth frame and every fourth pixel. The supplied bundle matches RGB presentation timestamps to depth odometry timestamps; Polycam joins exact shared keyframe IDs; ARKitScenes joins its sparse trajectory to the nearest RGB/depth/confidence/intrinsics frames and records offsets. The floor preview outlines the largest connected area of observed floor returns and records its polygon and observed-cell area. The wall pass reports projected planes, closed metric boundary candidates, provisional edge lengths, and nearby unclosed endpoint gaps. It checks candidate polygon overlap, excludes conflicts from the footprint sum, and reports shared-wall adjacency candidates. These are still diagnostics, not accepted room labels, identified doors/windows, or calibrated measurements: observed floor coverage is not the room footprint, an aligned candidate is not a verified wall, and a closed face is not proof of a room. Provisional edge lengths and areas have no calibrated confidence intervals. The pipeline treats depth values as millimeters, poses as camera-to-world transforms, and the least-varying camera-motion axis as vertical; validate these against capture documentation and ground truth. It does not create an accepted survey-grade floor plan.
 
-Any line-intersection faces are copied to `property_plan.boundary_hypotheses` and the new `property_plan.room_candidates` array in `result.json`, with vertices, candidate area, side lengths, side-level supporting wall IDs, and explicit uncalibrated status. `property_plan.rooms` remains empty until a candidate is independently validated and accepted. The latest supplied RGB-D run produced one 3.304 m² four-sided candidate; this is a review artifact, not evidence of a complete multi-room property plan.
+Any line-intersection faces are copied to `property_plan.boundary_hypotheses`, `property_plan.room_candidates`, and `property_plan.stitched_plan.candidate_footprints` in `result.json`. `scan_stitched_plan.geojson` and `.svg` visualize the same-world-frame candidates, measured-looking area sum, overlaps excluded from the sum, and shared-edge adjacency candidates. `property_plan.rooms` remains empty until candidates are independently validated and accepted. The latest supplied RGB-D run produced one 3.304 m² four-sided candidate; this remains one review candidate, not a complete multi-room property plan.
 
 Each RGB-D run also writes `geometry_review.geojson`, containing the observed floor-coverage outline, projected wall spans, candidate face polygons, and unclassified boundary-gap review targets, plus a vector `geometry_review.svg` sheet labeling the candidate area, side lengths, and open gaps. Gap features have a blank `review_label` field for manual annotation; they are not opening detections. These files use a capture-local coordinate frame with metres assumed and are intended for review, not as a survey-ready floor plan.
 
@@ -124,7 +135,7 @@ python -m pipeline.validation outputs
 python -m pipeline.validation outputs\some_run\result.json
 ```
 
-Until room extraction and calibration are implemented, unsupported plan and measurement fields are explicitly marked unavailable. The requirement-by-requirement status is tracked in `docs/compliance_matrix.md`.
+Until room extraction, metric calibration, and independent validation are implemented, unsupported plan and measurement fields are explicitly marked unavailable. Scan-derived candidate stitching is diagnostic only. The requirement-by-requirement status is tracked in `docs/compliance_matrix.md`.
 
 The repeatable field procedure for matching room IDs across photo, video, LiDAR, staged-damage, and ground-truth captures is in [`docs/capture_protocol.md`](docs/capture_protocol.md). Extracted Polycam raw-data folders are supported; the ZIP itself must be extracted before running the pipeline. The printable one-page stock capture card is [`docs/one_page_capture_protocol.md`](docs/one_page_capture_protocol.md).
 
@@ -168,20 +179,39 @@ The report scores opening width within 2 cm on at least 85% (including misses/ph
 
 For a scored before/after fix loop, use [`benchmark/fix_declaration.template.json`](benchmark/fix_declaration.template.json) after measured benchmark results identify a real failing gate, then run `python pipeline\evaluation\fix_loop.py benchmark\fix_declaration.json`. The report retains prediction error, gate movement, artifact hashes, and regeneration commands.
 
-## Human-reviewed damage and scope sidecar
+## Automated damage classification and scope takeoff
 
-The pipeline does not detect damage. If an assessor has independently labeled it, pass a sidecar with `damage_regions`, `concealed_damage_flags`, and `scope_line_items` arrays using the shared result schema. Damage polygons must point to existing original images; relative image paths resolve from the sidecar directory. The sidecar values are copied into the run result only after schema and evidence-path validation. The result records that these labels were human supplied.
+The optional detector uses Roboflow's public `wall-damage-detection/1` model for crack, flaking paint, missing material, and water damage. Its public model page reports 0.48 mAP@50, 0.644 precision, and 0.473 recall, so treat detections as review targets rather than inspection decisions. The hosted model and dataset page list a CC BY 4.0 license. Images are uploaded to Roboflow during inference; do not use this hosted route for images you are not allowed to share with that service. Capture images and generated outputs remain Git-ignored.
 
-Start from `benchmark/assessment.template.json`, fill it from reviewed evidence, then run:
+### Get an API key and run inference
+
+1. Sign in to [Roboflow](https://app.roboflow.com/).
+2. Open **Settings → API Keys** in the Roboflow workspace and copy the private API key. Keep it secret; do not paste it into source code, a JSON sidecar, or a Git-tracked file. Roboflow's hosted API uses the key for authentication; see its [hosted inference documentation](https://docs.roboflow.com/inference-classification/hosted-api).
+3. From the Property Vision repository folder, set the key for this PowerShell window. `Read-Host` avoids putting the secret itself into the command history:
 
 ```powershell
-python main.py "captures\property_lidar\R01" --assessment-json "benchmark\assessment.json"
+$env:ROBOFLOW_API_KEY = Read-Host "Paste your Roboflow private API key"
+python -m pipeline.damage_inference "captures\apartment_case_01\photo_tier" --output "outputs\damage_assessment.json"
 ```
 
-A concealed-damage flag must identify its fired `rule_id`, surface, rationale, and evidence; a scope quantity must include its value, unit, method, and measurement status. Do not enter a flag without evidence supporting the stated rule. This assisted entry path does not implement automated damage classification, concealed-damage inference, or takeoff estimation.
+Change the image-folder argument if your photos are stored elsewhere. The command searches that folder recursively, applies a default 0.25 confidence threshold, and writes `damage_assessment.json`. You can change the threshold with `--confidence 0.4`. Each detection becomes a schema-compatible image-space bounding polygon and preliminary scope line. Crack quantity is the bounding-box long axis; other quantities are bounding-box area. Units remain `px`/`px^2` unless a known scale for a nearly front-facing surface is supplied with `--scale-m-per-px 0.001`. Metric estimates remain partial because boxes are not pixel masks and perspective is not corrected. This does not estimate materials, labor, cost, or concealed damage. The sidecar records the model and that the images were uploaded to the provider.
+
+### Apply detections to an existing run
+
+List available results and choose the `result.json` produced for the same image capture:
+
+```powershell
+Get-ChildItem .\outputs -Recurse -Filter result.json | Select-Object -ExpandProperty FullName
+$resultPath = (Read-Host "Paste the chosen result.json path, without surrounding quotes").Trim('"')
+python -m pipeline.assessment "$resultPath" "outputs\damage_assessment.json"
+python -m pipeline.validation "$resultPath"
+```
+
+The result path printed after application should end in `result.json`. The application step checks the sidecar shape and that every referenced evidence image still exists, then validates the updated result against the shared schema. Use `benchmark/assessment.template.json` instead when entering human-reviewed annotations. Automated predictions are marked as hosted-model output in the result limitations, not as human labels.
 
 ## Current limitations
 
 - COLMAP's monocular reconstruction does not establish metric scale by itself.
-- Sparse points and camera poses are not a floor plan. Multi-room photo/video inputs are accepted, but room placement, accepted dimensions, openings, adjacency, and damage interpretation are unavailable.
-- The full case-study contract still needs three-tier capture, multi-room stitching, a real-data-validated drift ablation, ground-truthed benchmarks, calibrated intervals, the incumbent comparison, and the fix loop.
+- Sparse points and camera poses are not a floor plan. Multi-room photo/video inputs are accepted, but metric room placement and adjacency are unavailable from those tiers.
+- RGB-D stitching and damage takeoff are diagnostic/proxy outputs; metric scale, completeness, detector quality on this property, and measured scope accuracy are not validated.
+- The full case-study contract still needs three-tier capture evidence, a surveyed multi-room scan benchmark, a real-data-validated drift ablation, calibrated intervals, the incumbent comparison, and the fix loop.

@@ -44,6 +44,8 @@ The audit fits both one uniform pixel-per-metre scale and separate X/Y scales, w
 3. In one furnished room, stage and label two examples from two damage classes. Save the original images, measure each damaged area independently, and trace the visible region as pixel coordinates in its original image. Keep each label tied to a room and surface ID; do not estimate square metres from the image polygon without calibration.
 4. Run `main.py` for each capture and preserve each run's `result.json`. A run record in the manifest points to one result and one ground-truth room. Repeats share the same `repeat_group` value.
 
+For optional automated damage proposals, follow the README section [Automated damage classification and scope takeoff](../README.md#automated-damage-classification-and-scope-takeoff). It documents API-key setup, image upload/privacy, prediction generation, and applying the sidecar. Independently trace and measure each staged example for this benchmark; the detector's box-derived quantities are preliminary and must not replace the ground-truth measurement.
+
 For `raw_measurements.template.csv`, use `record_type` values `wall_length`, `floor_area`, `ceiling_height`, `opening_width`, `opening_sill_height`, `property_footprint`, or `adjacency`. Store lengths in metres and areas in square metres. Record each distinct wall/opening ID, both ceiling readings per room, and room-to-room edges. The JSON ground-truth manifest contains the benchmark summaries; keep the CSV as the raw measurement record.
 
 ## Fill the manifest
@@ -95,7 +97,7 @@ Example shape (replace all placeholders with measured values and real saved file
 
 When Property Vision has no measured output for a baseline dimension, the report lists it as not comparable. A missing prediction does not count as a win or as a shared dimension.
 
-The current reconstruction does not emit accepted dimensioned rooms or classified openings, so many scores will be unavailable/fail until those capabilities exist. A mapped boundary hypothesis and its manually matched sides can still be compared with tape-measured room area and wall lengths as diagnostics. Those comparisons do not establish accepted rooms/walls or accuracy passes. Do not manually edit a result to make a gate pass. The evaluator scores dimensions and repeated-run consistency and checks staged-damage annotation readiness; automated damage detection and measurement are not implemented yet.
+The current reconstruction does not emit accepted dimensioned rooms or classified openings, so many scores will be unavailable/fail until those capabilities exist. A mapped boundary hypothesis and its manually matched sides can still be compared with tape-measured room area and wall lengths as diagnostics. Those comparisons do not establish accepted rooms/walls or accuracy passes. Do not manually edit a result to make a gate pass. The evaluator scores dimensions and repeated-run consistency and checks staged-damage annotation readiness. A hosted four-class damage detector and bounding-box quantity proxies now exist, but they have not been scored against staged damage truth and do not constitute calibrated physical measurement.
 
 ## Run scoring
 
